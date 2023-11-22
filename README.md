@@ -6,7 +6,7 @@ Data and scripts needed to process the output of the demultiplexer for dada2 for
 You can download the whole content of the repository as a zip file, or clone it if you have a git client
 
 ### Dependecies
-The code here will run in UNIX and R. If using Windows, you have to install the WSL2 and select Ubuntu to run the Unix code (Only for `swarm`). You have to install swarm from [here](https://github.com/torognes/swarm).
+The code here will run in UNIX and R. If using Windows, you have to install the WSL2 and select Ubuntu to run the Unix code (Only for `swarm`). You have to install `swarm` from [here](https://github.com/torognes/swarm), and `cutadapt` from [here](https://cutadapt.readthedocs.io/en/stable/installation.html).
 
 Plenty of R packages to install. R itself was  v4.1.3. The R packages needed are:
 
