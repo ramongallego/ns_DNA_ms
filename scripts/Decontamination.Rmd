@@ -1,0 +1,351 @@
+---
+title: "Denoise Miseq Run"
+author: "Belen Arias"
+date: "2022-12-06"
+params: 
+  folder:
+    value: "/Users/RG.5015511/OneDrive - UAM/Documentos/Projects/ns_DNA_ms/output"
+output:
+  html_document:
+    df_print: paged
+  html_notebook: default
+  pdf_document: default
+editor_options:
+  markdown:
+    wrap: 72
+---
+
+
+After running the demultiplexer_for_dada2 (http://github.com/ramongallego/demultiplexer_for_dada2), we have to denoise the whole dataset. We will do this by using 4 different processes:
+
+
+  * **Estimation of *Tag-jumping* or indices *cross-talk* **. We run multiple samples on each MiSeq run. These are identified by two sets of molecular barcodes. There is the potential of some sequences to be assigned to the wrong sample, which is a bummer. To estimate how many reads did this, on each MiSeq run we added some samples whose composition is known and extremely unlikely to be present in the enviromental samples studied. AS a result of this **Tag-jumping**, some of the positive control sequences might show in the environmental samples and viceversa. In our case, these positive controls are made of either Kangaroo or Ostrich (and Alligator). The process consists on, for each run, to model the compositon observed on the positive controls and substract it from the environmental samples from that run. The output will be a dataset with the same number of samples as before, but with fewer reads of certain sequences (ASVs)
+  
+  * **Discarding samples with extremely low number of reads**. Sometimes the number of reads sequenced from a particular replicate are really low, and hence the relative proportions of ASVs would be skewed. 
+  
+  * **Full clearance from Positive control influence**. THis process also takes advantage of the known composition of the positive controls. Each ASV found in the positive controls with a higher abundace in them than in the rest of the samples will be labelled as  **Positive** and removed from the environmental dataset. The output will be a dataset with the same number of samples as before but with fewer ASVs.
+  
+  * **Occupancy modelling** . Is the presence of a ASV a reflection of a biological reality or likely a PCR artifact? This may seem trivial in extreme cases (an ASV that only appears in one PCR replicate in the whole dataset) but how to discriminate between PCR artifacts from rare but real organisms? We use Occupancy modelling to determine if the pattern of presence of a ASV in a dataset reflects that. The output of this procedure will be a datasetwith the same number of samples as before but with fewer ASVs.
+  
+  * **Dissimilarity between PCR replicates**. The workflow that leads to the sequencing of a particular sample is subject to many stochatic processes, and it is not unlikely that the composition retrieved is very different for the original community. A way to ensure that this difference is minimal is through the separate analysis of each PCR replicate. We used that approach and modeled the dissimilarity between each PCr replicate and the group centroid. This way of modeling the dissimilarity allows us to discard those PCR replicate that won't fit the normal distribution of dissimilarities. The output of this procedure will be a dataset with the same number of **Hashes** as before but with fewer **samples**.
+  
+  
+As with everything, we will start the process by loading the required packages and datasets.
+
+# Load the dataset and metadata
+
+
+
+```{r load libraries, include=FALSE}
+ knitr::opts_chunk$set(warning = FALSE, message = F)
+ library (tidyverse)
+ library (vegan)
+ #library (MASS)
+ library (reshape2)
+ library (seqinr)
+ library (patchwork)
+```
+
+We will load the ASV table and the metadata file. They are in the same folder so we use `list.files` to access them and a neat combination of `bind.rows` and `map(read_csv)`. 
+
+```{r load datasets - we will be doing that for all runs}
+
+
+ASV.table <- read_csv(file.path(params$folder, "ASV_table_220.csv"))
+
+ASV.table %>% 
+  distinct(sample) %>% 
+  mutate(Project = case_when(str_detect(sample, "POSITIVE") ~ "Positive_Control",
+                             str_detect(sample, "^Gb|^Gh|^Pv|^Gg") ~ "North Atlantic" )) -> metadata
+
+
+Hash.key <- read_csv(file.path(params$folder,"hash_key_220.csv"))
+
+```
+
+
+## Data Cleanup - Don't act like you don't need this
+
+A few things we check for: That **no sample appears twice** in the metadata. That the metadata **uses Tag_01 instead of Tag_1** (so it can be sorted alphabetically). That **the structure** Site_YYYYMM[A-C].[1-3] **is the same** across the dataset.
+
+```{r data cleaning}
+# Check that no sample appears more than once in the metadata
+metadata %>% 
+  group_by(sample) %>%
+  summarise(tot = n()) %>% 
+  arrange(desc(tot)) # Samples only appear once
+
+```
+
+The output of this process are a clean ASV table and a clean metadata file.
+
+## Cleaning Process 1: Estimation of *Tag-jumping* or sample *cross-talk*
+
+Before we modify our datasets on any way, we can calculate how many sequences that were only supposed to be in the positives control appeared in the environmental samples, and how many did the opposite. First we divide the dataset into positive control and environmental samples. Also create an ordered list of the Hashes present in the positive controls, for ease of plotting
+
+```{r split into two}
+metadata %>% 
+  select(sample, Project ) %>% 
+  left_join(ASV.table) %>% 
+
+  mutate(source = case_when(Project == "Positive_Control"    ~   "Positives",
+                                         TRUE                                                ~   "Samples") ) %>% 
+  select(-Project)-> ASV.table
+
+
+ASV.table %>% 
+  filter (source == "Positives") %>% 
+  group_by(Hash) %>% 
+  summarise(tot = sum(nReads)) %>% 
+  arrange(desc(tot)) %>% 
+  pull(Hash) -> good.order
+```
+
+Now let's create a jumping vector. What proportion of the reads found in the positives control come from elsewhere, and what proportion of the reads in the samples come from the positives control.
+
+### Step 1: Nest the dataset and split it in positives and samples
+
+To streamline the process and make it easier to execute it similarly but independently on each Miseq run, we nest the dataset by run. 
+So Step1 is create a nested table so we can run this analysis on each run independently. 
+
+
+```{r nesting the dataset}
+ASV.table %>% 
+  mutate(Miseq_run = "1") %>% 
+  group_by(Miseq_run, source) %>% 
+  nest() %>% 
+  pivot_wider(names_from = source, values_from =  data) -> ASV.nested 
+```
+
+That wasn't too complicated. Let's start a summary function that keeps track of our cleaning process
+
+```{r summary.file}
+how.many <- function(ASVtable, round){
+  ASVtable %>% ungroup() %>% 
+    summarise(nsamples = n_distinct(sample),
+              nHashes = n_distinct(Hash),
+              nReads = sum(nReads), 
+              Stage = paste0("Step_", round)) %>% 
+    gather(starts_with("n"), value = "number", key = "Stat")
+}
+ASV.nested %>% 
+  transmute(Summary = map(Samples, ~ how.many(ASVtable = .,round = 0)))  -> ASV.summary
+
+ASV.summary %>% 
+  unnest(Summary)
+
+```
+
+### Step 2: Model the composition of the positive controls of each run 
+
+
+We create a vector of the composition of each positive control and substract it from the environmental samples from their runs
+
+
+
+```{r jumping vector}
+ASV.nested %>% 
+  mutate (contam.tibble = map(Positives, 
+                              function(.x){
+                                .x %>%
+                                  group_by(sample) %>%
+                                  mutate (TotalReadsperSample = sum(nReads)) %>%
+                                  mutate (proportion = nReads/TotalReadsperSample) %>%
+                                  group_by (Hash) %>%
+                                  summarise (vector_contamination = max (proportion))
+                                }) ) -> ASV.nested
+ASV.nested %>% 
+  group_by(Miseq_run) %>% 
+  select(contam.tibble) %>% 
+  unnest(cols = contam.tibble) # Check how it looks like
+```
+
+
+### Step 3: Substract the composition of the positive controls from the environment samples
+
+The idea behind this procedure is that we know, for each run, how many reads from each Hash appeared in the positive controls. These come from 2 processes: sequences we know should appear in the positive controls, and sequences that have *jumped* from the environment to the positive controls. With this procedure, we substract from every environmental sample the proportion of reads that jumped from elsewhere.
+
+```{r cleaning step 1}
+ASV.nested %>% 
+  mutate(cleaned.tibble = map2(Samples, contam.tibble, function(.x,.y){ 
+    .x %>%
+      group_by (sample) %>%
+      mutate (TotalReadsperSample = sum (nReads)) %>%
+      left_join(.y, by = "Hash") %>%
+      mutate (Updated_nReads = ifelse (!is.na(vector_contamination),  nReads - (ceiling(vector_contamination*TotalReadsperSample)), nReads)) %>%
+      filter (Updated_nReads > 0) %>%
+      ungroup() %>% 
+      dplyr::select (sample, Hash, nReads = Updated_nReads)
+      
+    
+  })) -> ASV.nested
+
+ASV.nested %>% 
+  group_by(Miseq_run) %>% 
+  select(cleaned.tibble) %>% 
+  unnest(cleaned.tibble) #Check how they look
+```
+Add this step to the summary table we were creating
+
+```{r summary.file.2}
+ASV.nested %>% 
+  transmute(Summary.1 = map(cleaned.tibble, ~ how.many(ASVtable = .,round = "1.Jump"))) %>% 
+  left_join(ASV.summary) %>% 
+  mutate(Summary   = map2(Summary, Summary.1, bind_rows)) %>%
+  dplyr::select(-Summary.1) -> ASV.summary 
+
+ASV.summary %>% unnest(Summary)
+```
+
+## Cleaning Process 2: **Discarding samples with low number of reads**
+
+We will fit the number of reads assigned to each sample to a normal distribution and discard those samples with a probability of 95% of not fitting in that distribution. The output would be a dataset with less samples and potentially less number of unique Hashes.
+
+```{r fitting nReads per sample}
+ASV.nested %>% 
+  select(Miseq_run,cleaned.tibble) %>% 
+  unnest(cleaned.tibble) %>% 
+  group_by(sample) %>%
+  summarise(tot = sum(nReads)) -> all.reps
+# Visualize
+all.reps %>%  
+  pull(tot) -> reads.per.sample
+names(reads.per.sample) <- all.reps %>% pull(sample)  
+
+normparams.reads <- MASS::fitdistr(reads.per.sample, "normal")$estimate
+all.reps %>%  
+  mutate(prob = pnorm(tot, normparams.reads[1], normparams.reads[2])) -> all.reps
+#  probs <- pnorm(all_pairwise_distances, normparams[1], normparams[2])
+outliers <- 
+  all.reps %>% 
+  filter(prob < 0.025 & tot < normparams.reads[1])
+ASV.nested %>% 
+  mutate(Step.1.low.reads = map (cleaned.tibble, ~ filter(.,!sample %in% outliers$sample) %>% ungroup)) -> ASV.nested
+ASV.nested %>% 
+  transmute( Summary.1 = map(Step.1.low.reads, ~ how.many(ASVtable = .,round = "2.Low.nReads"))) %>% 
+  left_join(ASV.summary) %>% 
+  mutate(Summary   = map2(Summary, Summary.1, bind_rows)) %>%
+  dplyr::select(-Summary.1) -> ASV.summary 
+```
+
+
+
+
+## Cleaning Process 3: **Full clearance from Positive control influence**
+
+Removing the Hashes that belong to the positive controls. First, for each Hash that appeared in the positive controls, determine whether a sequence is a true positive or a true environment. For each Hash, we will calculate, maximum, mean and total number of reads in both positive and samples, and then we will use the following decision tree:
+
+  * If all three statistics are higher in one of the groups, we will label it either of Environmental or Positive control influence.
+  
+  * If there are conflicting results, we will use the Hashes. to see if they belong to either the maximum abundance of a Hash is in a positive, then it is a positive, otherwise is a real sequence from the environment.
+
+
+Now, for each Hash in each set of positives controls, calculate the proportion of reads that were missasigned - they appeared somewhere they were not expected.
+We will divide that process in two: first . A second step would be to create a column named proportion switched, which states the proportion of reads from one Hash that jumped from the environment to a positive control or viceversa. The idea is that any presence below a threshold can be arguably belong to tag jumping.
+
+```{r real or positive}
+ASV.table %>% 
+  filter (Hash %in% good.order) %>%
+  group_by(sample) %>% 
+  mutate(tot.reads = sum(nReads)) %>% 
+  group_by(Hash,sample) %>% 
+  mutate(prop = nReads/tot.reads) %>% 
+  group_by(Hash, source) %>% 
+  summarise (max.  = max(prop),
+             mean. = mean(prop),
+             tot.  = sum(nReads)) %>% 
+  gather(contains("."), value = "number", key = "Stat") %>%
+  spread(key = "source", value = "number", fill = 0) %>% 
+  group_by(Hash, Stat) %>%
+  mutate(origin = case_when(Positives > Samples ~ "Positive.control",
+                            TRUE                ~ "Environment")) %>% 
+  group_by (Hash) %>%
+  mutate(tot = n_distinct(origin)) -> Hash.fate.step2
+Hash.fate.step2 %>% 
+  filter(tot == 1) %>% 
+  group_by(Hash) %>% 
+  summarise(origin = unique(origin)) %>% 
+  filter(origin == "Positive.control") -> Hashes.to.remove.step2
+
+```
+IN order to train DADA2 to better distinguish when positive control sequences have arrived in the environment, we will keep the sequences in a csv file
+
+
+```{r ASVs from positives}
+Hashes.to.remove.step2 %>% 
+  left_join(Hash.key) %>% 
+  select(Hash, Sequence) %>% 
+  write_csv("~/Documents/Projects/nsDNA_readsrecov/edna_db2/pipeline_output/Hashes.to.remove.csv")
+```
+
+### Remove the positive control hashes from the composition of the ASVs
+
+```{r cleaning.Step2}
+ASV.nested %>% 
+  mutate(Step2.tibble = map (Step.1.low.reads, ~ filter(.,!Hash %in% Hashes.to.remove.step2$Hash) %>% ungroup)) -> ASV.nested
+saveRDS(ASV.nested, file = "~/Documents/Projects/nsDNA_readsrecov/edna_db2/pipeline_output/Cleaning.before.Occ.model")
+
+ASV.nested %>% 
+  transmute( Summary.1 = map(Step2.tibble, ~ how.many(ASVtable = .,round = "3.Positives"))) %>% 
+  left_join(ASV.summary) %>% 
+  mutate(Summary   = map2(Summary, Summary.1, bind_rows)) %>%
+  dplyr::select(-Summary.1) -> ASV.summary 
+ASV.summary %>% 
+  unnest()
+```
+
+## Exporting the output
+
+We will export the final cleaned table with four columns (Miseq_run, sample, Hash, nReads)
+
+```{r}
+ASV.nested %>% 
+  select(Miseq_run, Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  mutate(nReads = as.integer(nReads)) %>% 
+  write_csv("~/Documents/Projects/nsDNA_readsrecov/edna_db2/pipeline_output/ASV_table_after_cleanup.csv")
+ASV.nested %>% 
+  select(Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  distinct(Hash) %>% 
+  left_join(Hash.key) %>% 
+  write_csv("~/Documents/Projects/nsDNA_readsrecov/edna_db2/pipeline_output/Hash_Key_after_cleanup.csv")
+
+input <- read_csv("~/Documents/Projects/nsDNA_readsrecov/edna_db2/pipeline_output/Hash_Key_after_cleanup.csv")
+output <- "~/Documents/Projects/nsDNA_readsrecov/edna_db2/pipeline_output/pipeline_output/Hash_Key_after_cleanup.fasta"
+write.fasta (sequences = as.list(input$Sequence),
+             names = as.list(input$Hash),
+             file.out = output)
+```
+
+## Summary of the cleanup process
+
+```{r last graph}
+ASV.summary %>% 
+  unnest() %>% 
+  ggplot(aes(x=Stage, y=number, fill = Stat))+
+    geom_line(aes(group = Miseq_run, color = Miseq_run))+
+  facet_grid(Stat~., scales = "free")+
+  theme(axis.text.x = element_text(angle = 45, hjust =1))#,
+                                 
+```
+
+# Coverage Table with nReads
+
+```{r}
+# Vector with desired order
+
+ASV.nested %>% 
+  select(Miseq_run, Step2.tibble) %>% 
+  unnest(Step2.tibble) %>% 
+  mutate(nReads = as.integer(nReads)) %>% 
+  group_by(sample) %>% 
+  summarise (nReads = sum(nReads)) %>% 
+  left_join(metadata) -> midstep
+    
+# As a table
+midstep %>% 
+  group_by(Project) %>% 
+  summarise (mean = mean(nReads), max = max(nReads), min = min(nReads), sd = sd(nReads),
+             nsamp = n()) 
+```

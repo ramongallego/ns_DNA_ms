@@ -1,0 +1,549 @@
+---
+title: "Dada2_report"
+author: "Belen_rawdata_trim270_210"
+date: ""
+output: html_document
+params:
+  folder:
+    value: "input/NCBI_reads"
+  hash:
+    value: "yes"
+  output:
+    value: "output"
+
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir=params$folder)
+```
+
+## Dada2 report
+
+You have successfully split your libraries into a pair (or two) of fastq files per sample. Now let's import the output of demultiplex_both_fastq.sh
+
+First load the packages. And let's update the parameters we need
+```{r loading packages, echo=FALSE ,message=FALSE}
+
+library (tidyverse)
+library (dada2)
+library (Biostrings)
+library (digest)
+library (here)
+
+
+
+path1 <- here(params$folder)
+
+
+
+sample.map <- read_csv(here("input", "metadata.csv"))
+
+
+
+# Function to summarise data
+
+getN <- function(x) sum(getUniques(x))
+
+```
+Firstly, we'll find the patterns that separate our Fwd, Rev, .1 and .2 files. look at the quality of the .1 and .2 reads
+```{r listing files}
+
+
+F1s <- sort(list.files(path1, pattern="_F1_filt.fastq", full.names = TRUE))
+F2s <- sort(list.files(path1, pattern="_F2_filt.fastq", full.names = TRUE))
+R1s <- sort(list.files(path1, pattern="_R1_filt.fastq", full.names = TRUE))
+R2s <- sort(list.files(path1, pattern="_R2_filt.fastq", full.names = TRUE))
+
+
+tibble(F1s = F1s, 
+       F2s = F2s) %>% 
+  mutate(sample_name = str_replace(basename(F1s), "_F1_filt.fastq","")) %>% 
+  inner_join(sample.map, by = c("sample_name" = "sample")) -> goodFs
+
+
+
+F1sgood<-goodFs$F1s
+F2sgood<-goodFs$F2s
+
+FiltFs <- goodFs$sample_name
+
+tibble(R1s = R1s, 
+       R2s = R2s) %>% 
+  mutate(sample_name = str_replace(basename(R1s), "_R1_filt.fastq","")) %>% 
+  inner_join(sample.map, by = c("sample_name" = "sample")) -> goodRs
+R1sgood<-goodRs$R1s
+R2sgood<-goodRs$R2s
+FiltRs <- goodRs$sample_name
+
+
+```
+
+
+
+## Now start with the trimming of each read based on the quality we just plotted
+```{r filter and trim}
+filt_path <- file.path(path1, "/filtered_220_120") 
+dir.create(filt_path)
+# Place filtered files in filtered/ subdirectory
+
+filtF1s <- file.path(filt_path, paste0(FiltFs, "_F1_filt.fastq.gz"))
+filtF2s <- file.path(filt_path, paste0(FiltFs, "_F2_filt.fastq.gz"))
+out_Fs <- filterAndTrim(F1sgood, filtF1s, F2sgood, filtF2s,
+   truncLen=c(220,120),
+                      maxN=0, maxEE=c(2,2),
+   # truncQ=10, rm.phix=TRUE,
+                      compress=TRUE, multithread=F) # On Windows set multithread=FALSE
+
+filtR1s <- file.path(filt_path, paste0(FiltRs, "_R1_filt.fastq.gz"))
+filtR2s <- file.path(filt_path, paste0(FiltRs, "_R2_filt.fastq.gz"))
+out_Rs <- filterAndTrim(R1sgood, filtR1s, R2sgood, filtR2s,
+  truncLen=c(220,120),
+                      maxN=0, maxEE=c(2,2),
+  # truncQ=10, rm.phix=TRUE,
+                      compress=TRUE, multithread=F) # On Windows set multithread=FALSE
+```
+A nice idea is to plot the Quality of the F1 reads
+
+```{r qplot1, echo=FALSE}
+plotQualityProfile(filtF1s[1])
+```
+
+The quality should be similar to that of the Reverse .1 reads
+
+```{r plot2, echo=FALSE}
+plotQualityProfile(filtR1s[1])
+```
+
+On the other hand, the quality of the .2 reads should decrease earlier
+```{r qplot3, echo=FALSE}
+plotQualityProfile(filtF2s[2])
+```
+
+```{r as tibble}
+out_Fs_tibble<-tibble(file=dimnames(out_Fs)[[1]], reads.in = out_Fs[,1], reads.out=out_Fs[,2], direction = "Fwd")
+out_Rs_tibble<-tibble(file=dimnames(out_Rs)[[1]], reads.in = out_Rs[,1], reads.out=out_Rs[,2], direction = "Rev")
+
+bind_rows(out_Fs_tibble, out_Rs_tibble) %>%
+  group_by(direction) %>%
+  summarise (across(where(is.numeric), sum))
+
+```
+Before calculating errors, it is best to remove samples that have 0 or just a few reads.
+
+```{r removing samples 1}
+filtF1s[out_Fs_tibble$reads.out>20] -> filtF1s_good
+filtF2s[out_Fs_tibble$reads.out>20] -> filtF2s_good
+
+filtR1s[out_Rs_tibble$reads.out>20] -> filtR1s_good
+filtR2s[out_Rs_tibble$reads.out>20] -> filtR2s_good
+
+
+```
+
+
+Now the first crucial step: learning the error rates that would be different for fwd and rev reads
+
+```{r learning errors, echo=T}
+errF1 <- learnErrors(filtF1s_good, multithread=TRUE,verbose = 0)
+errF2 <- learnErrors(filtF2s_good, multithread=TRUE,verbose = 0)
+errR1 <- learnErrors(filtR1s_good, multithread=TRUE,verbose = 0)
+errR2 <- learnErrors(filtR2s_good, multithread=TRUE,verbose = 0)
+
+# Write errors to csv to see if they matter at all
+tosave <- list(errF1, errF2, errR1, errR2)
+
+saveRDS(tosave, file = here("input","all.errors.rds"))
+rm(tosave)
+ gc()
+#
+
+```
+
+Which we can plot now to see the error rates between transitions of each pair of nt
+```{r plotErrors}
+
+plotErrors(errF1, nominalQ = T)
+plotErrors(errF2, nominalQ = T)
+plotErrors(errR1, nominalQ = T)
+plotErrors(errR2, nominalQ = T)
+
+
+```
+
+## Now go to the dereplication step
+
+```{r dereplication, echo=F,message=FALSE}
+
+# Name the derep-class objects by the sample names
+
+rownames(out_Fs) <- FiltFs
+
+derepF1s <- derepFastq(filtF1s_good, verbose=TRUE)
+
+derepF2s <- derepFastq(filtF2s_good, verbose=TRUE)
+
+
+write_rds(derepF1s, here("input","derepF1s.rds"))
+write_rds(derepF2s, here("input","derepF2s.rds"))
+rm(derepF2s, derepF1s)
+gc()
+# Now the other half
+
+rownames(out_Rs) <- FiltRs
+
+derepR1s <- derepFastq(filtR1s_good, verbose=TRUE)
+
+ write_rds(derepR1s, here("input","derepR1s.rds"))
+
+rm(derepR1s)
+gc()
+
+derepR2s <- derepFastq(filtR2s_good, verbose=TRUE)
+write_rds(derepR2s, here("input","derepR2s.rds"))
+rm(derepR2s)
+gc()
+
+
+
+
+
+
+
+```
+
+## And finally an inference of the sample composition
+
+```{r dadaing, message=FALSE}
+gc()
+derepF1s <- read_rds(here("input","derepF1s.rds"))
+dadaF1s <- dada(derepF1s, err = errF1, multithread = TRUE)
+rm (derepF1s)
+gc()
+
+derepF2s <- read_rds(here("input","derepF2s.rds"))
+dadaF2s <- dada(derepF2s, err = errF2, multithread = TRUE)
+rm (derepF2s)
+gc()
+
+derepR1s <- read_rds(here("input","derepR1s.rds"))
+dadaR1s <- dada(derepR1s, err = errR1, multithread = TRUE)
+rm(derepR1s)
+gc()
+
+derepR2s <- read_rds(here("input","derepR2s.rds"))
+dadaR2s <- dada(derepR2s, err = errR2, multithread = TRUE)
+rm(derepR2s)
+gc()
+```
+
+## We are ready now to merge reads - using the denoised reads and the derep files.
+We will start by saving all files to disk.
+```{r saving to disk}
+
+
+   saveRDS(list( dadaF1s, dadaF2s, dadaR1s,dadaR2s), file = here("input","tosave.rds"))
+
+```
+The pipeline breaks if for some reason there are samples that don't have any reads passing filters
+(or at least that is the current hypothesis)
+
+Let's try to subset only those samples with more than 1000 reads on each direction
+
+```{r merging pairs}
+
+to.keep.F <- map_lgl(dadaF1s, ~(sum(.x$denoised) > 150)) # Which samples have more than 150 reads passing filters in the Fwd direction
+to.keep.R <- map_lgl(dadaR1s, ~(sum(.x$denoised) > 150)) #  Which samples have more than 150 reads passing filters in the Rev direction
+
+#to.keep <- (to.keep.F + to.keep.R) == 2 # Keep only those that pass boths filters
+derepF1s <- read_rds(here("input","derepF1s.rds"))
+derepF2s <- read_rds(here("input","derepF2s.rds"))
+mergersF <- mergePairs(dadaF1s[to.keep.F],
+   derepF1s[to.keep.F],
+   dadaF2s[to.keep.F],
+   derepF2s[to.keep.F],
+   verbose = 0)
+
+#Run a for loop that adds the number of unique reads that went into each ASV
+
+for (j in 1:length(mergersF)){
+
+  dadaF1s[[j]]@.Data[[2]] %>% rownames_to_column(var="forward") %>% select("forward", "nunq") ->Fwd
+  Fwd$forward<-as.integer(Fwd$forward)
+  dadaF2s[[j]]@.Data[[2]] %>% rownames_to_column(var="reverse") %>% select("reverse", "nunq") ->Rev
+  Rev$reverse<-as.integer(Rev$reverse)
+
+  mergersF[[j]] <- left_join(mergersF[[j]],Fwd, by="forward") %>% left_join(Rev, by="reverse") %>% mutate(nunq=pmin(nunq.x,nunq.y)) %>% select(-nunq.x,-nunq.y)
+
+
+}
+
+summary.fun <- function(list.of.step){
+
+  name.step <- deparse(substitute(list.of.step))
+
+  map_dfc(list.of.step, getN) %>%
+   pivot_longer(everything(), names_to = "sample", values_to = "value") %>%
+  mutate(step = name.step)
+}
+
+summary.fun(dadaF1s) %>%
+  bind_rows(summary.fun(dadaF2s)) %>%
+  bind_rows(summary.fun(dadaR1s)) %>%
+  bind_rows(summary.fun(dadaR2s)) %>%
+  bind_rows(summary.fun(derepF1s)) %>%
+  bind_rows(summary.fun(derepF2s)) %>%
+  bind_rows(summary.fun(mergersF))-> summary.stats
+
+
+out_Fs %>%
+  as.data.frame() %>%
+  rownames_to_column("file") %>%
+  dplyr::rename(reads.in.fwd =2, filtered.fwd = 3) %>%
+  pivot_longer(-file, names_to = "step") %>%
+  select(sample = file, step, value) %>%
+  bind_rows(summary.stats) -> summary.stats
+
+rm(dadaF1s, dadaF2s, derepF1s, derepF2s)
+
+gc()
+
+derepR1s <- read_rds(here("input","derepR1s.rds"))
+derepR2s <- read_rds(here("input","derepR2s.rds"))
+mergersR <- mergePairs(dadaR1s[to.keep.R],
+   derepR1s[to.keep.R],
+   dadaR2s[to.keep.R],
+   derepR2s[to.keep.R],
+   verbose = 0)
+
+for (j in 1:length(mergersR)){
+
+  dadaR1s[[j]]@.Data[[2]] %>% rownames_to_column(var="forward") %>% select("forward", "nunq") ->Fwd
+  Fwd$forward<-as.integer(Fwd$forward)
+  dadaR2s[[j]]@.Data[[2]] %>% rownames_to_column(var="reverse") %>% select("reverse", "nunq") ->Rev
+  Rev$reverse<-as.integer(Rev$reverse)
+
+  mergersR[[j]] <- left_join(mergersR[[j]],Fwd, by="forward") %>% left_join(Rev, by="reverse") %>% mutate(nunq=pmin(nunq.x,nunq.y)) %>% select(-nunq.x,-nunq.y)
+
+}
+
+summary.stats %>%
+  bind_rows(summary.fun(derepR1s)) %>%
+  bind_rows(summary.fun(derepR2s)) %>%
+  bind_rows(summary.fun(mergersR)) -> summary.stats
+
+out_Rs %>%
+  as.data.frame() %>%
+  rownames_to_column("file") %>%
+  dplyr::rename(reads.in.rev =2, filtered.rev = 3) %>%
+  pivot_longer(-file, names_to = "step") %>%
+  select(sample = file, step, value) %>%
+  bind_rows(summary.stats) -> summary.stats
+rm(derepR1s, derepR2s, dadaR1s, dadaR2s)
+gc()
+
+summary.stats |>
+  mutate (sample = str_remove(sample, "_[F|R][1|2]_filt.fastq.gz")) -> summary.stats
+```
+
+## Now we have to merge the Forward and Reverse Reads to make a unique object
+
+Step 1 is to create sequence tables for each direction, seqtabF and seqtabR
+```{r merging F and R (1)}
+
+seqtabF <- makeSequenceTable(mergersF)
+
+dim(seqtabF)
+
+rowSums(seqtabF) %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  dplyr::rename(value = 2) %>%
+  mutate(step = "Tabled.fwd") %>%
+  bind_rows(summary.stats) -> summary.stats
+
+table(nchar(getSequences(seqtabF)))
+
+seqtabR <- makeSequenceTable(mergersR)
+
+dim(seqtabR)
+
+nchar(getSequences(seqtabR)) %>% as.data.frame() %>%
+  dplyr::rename(length = 1) %>%
+  ggplot(aes(x = length)) + geom_density()
+
+rowSums(seqtabR) %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  dplyr::rename(value = 2) %>%
+  mutate(step = "Tabled.rev") %>%
+  bind_rows(summary.stats) -> summary.stats
+```
+
+
+Step  2 is to reverse complement the reverse reads, and checking how many of the reads in F were present in R (if you get a 0 means we have done something wrong). Lastly, we change the reverse sequences and add their Reverse complement instead
+```{r merging F and R (2)}
+reversed_sequences<-as.character(reverseComplement(DNAStringSet(colnames(seqtabR))))
+
+summary (colnames(seqtabF) %in% reversed_sequences)
+
+summary (reversed_sequences %in% colnames(seqtabF))
+
+colnames(seqtabR)<-reversed_sequences
+
+```
+
+Step 3 does the actual merging and returns another sequence Table
+
+```{r merging F and R (3)}
+
+seqtab.R.df=as.data.frame(seqtabR)
+
+seqtab.R.df %>%
+  rownames_to_column("sample") %>%
+  pivot_longer(-sample, names_to = "sequence", values_to = "nReads_R") -> seqtab.R.df
+
+seqtab.F.df=as.data.frame(seqtabF)
+seqtab.F.df %>%
+  rownames_to_column("sample") %>%
+  pivot_longer(-sample, names_to = "sequence", values_to = "nReads_F") -> seqtab.F.df
+
+full_join(seqtab.R.df, seqtab.F.df) %>%
+  replace_na(list(nReads_R = 0, nReads_F = 0)) %>%
+  group_by(sample,sequence ) %>%
+  mutate(nReads = sum(nReads_R + nReads_F)) %>%
+  select(sample, sequence, nReads)  %>%
+  pivot_wider(id_cols = sample, names_from = sequence, values_from = nReads, values_fill = 0) -> full_df
+
+
+
+final.seqtab <- full_df %>%
+  ungroup() %>%
+  select(-sample) %>%
+  as.matrix()
+
+dimnames(final.seqtab)[[1]] <- full_df$sample
+
+
+rowSums(final.seqtab) %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  dplyr::rename(value = 2) %>%
+  mutate(step = "Tabled") %>%
+  bind_rows(summary.stats) -> summary.stats
+
+
+```
+
+## Now get rid of the chimeras
+
+```{r RemovingChimeras, message=F}
+
+seqtab.nochim <- removeBimeraDenovo(final.seqtab, method="consensus", multithread=TRUE)
+
+dim(seqtab.nochim)
+
+table(nchar(getSequences(seqtab.nochim)))
+
+```
+
+
+
+## IF selected, proceed with Hashing: create a hash conversion table and saving files in tidyr format
+
+We are going to keep the info in a tidyr format and save it into a csv file
+```{r tidying and writing}
+
+seqtab.nochim.df=as.data.frame(seqtab.nochim)
+
+ASV.file <- here(params$output, "ASV_table_220.csv")
+
+# Now decide if you want hashing or not
+
+if (grepl ("yes", params$hash, ignore.case = TRUE)) {
+
+  conv_file <-  here(params$output,"hash_key_220.csv")
+
+  conv_table <- tibble( Hash = "", Sequence ="")
+
+  map_chr (colnames(seqtab.nochim.df), ~ digest(.x, algo = "sha1", serialize = F, skip = "auto")) -> Hashes
+  conv_table <- tibble (Hash = Hashes,
+                        Sequence = colnames(seqtab.nochim.df))
+
+  colnames(seqtab.nochim.df) <- Hashes
+
+
+  write_csv(conv_table, conv_file)
+
+
+seqtab.nochim.df %>%
+  rownames_to_column("sample") %>%
+  mutate(sample = str_remove(sample, "_[F|R][1|2]_filt.fastq.gz")) |> 
+  pivot_longer(-sample, names_to="Hash", values_to = "nReads") %>%
+  filter (nReads > 0) -> current_asv
+
+write_csv(current_asv, ASV.file)
+
+} else { #What do we do if you don't want hashes: two things - Change the header of the ASV table, write only one file
+
+  seqtab.nochim.df %>%
+  rownames_to_column("sample") %>%
+  pivot_longer(-sample, names_to="Sequence", values_to = "nReads") %>%
+  filter (nReads > 0) ->  current_asv
+  write_csv(current_asv, ASV.file)
+}
+
+
+```
+
+
+
+```{r}
+current_asv %>%
+  group_by(sample) %>%
+  summarise(value = sum(nReads)) %>%
+  mutate(step = "ASV") %>% bind_rows(summary.stats) -> summary.stats
+
+
+summary.stats %>%
+  mutate(direction = case_when(str_detect(step, "fwd|F")~"Fwd",
+                               str_detect(step, "rev|R")~"Rev",
+                               TRUE                     ~ "Both") ) -> summary.stats
+
+
+summary.stats %>%
+  mutate(file = case_when(str_detect(step, "1s")~ ".1",
+                               str_detect(step, "2s")~ ".2",
+                               TRUE ~ "Both")) %>%
+  filter (!str_detect(step,"derep")) %>%
+  mutate(Step = fct_recode(step, Reads.in = "reads.in.rev",
+                           Reads.in = "reads.in.fwd",
+                           Filtered = "filtered.rev",
+                           Filtered = "filtered.fwd",
+                           Denoised = "dadaF1s",
+                           Denoised = "dadaF2s",
+                           Denoised = "dadaR1s",
+                           Denoised = "dadaR2s",
+                           Merged   = "mergersF",
+                           Merged   = "mergersR",
+                           Tabled   = "Tabled.fwd",
+                           Tabled   = "Tabled.rev",
+                           FUSION   = "Tabled",
+                           ASV      = "ASV"),
+         Step = fct_relevel(Step, "Reads.in", "Filtered", "Denoised", "Merged", "Tabled", "FUSION" )) ->summary.stats
+
+current_asv %>%
+  group_by(sample) %>%
+  summarise(value = sum(nReads)) %>%
+  mutate(step = "ASV")
+
+
+write_csv(summary.stats, here(params$output,"dada2_summary_220.csv"))
+
+summary.stats %>%
+  filter(file !=".1") %>%
+  ggplot(aes(x = Step, y = value, fill = direction)) +
+  geom_col(position = "stack") +
+  scale_y_continuous(n.breaks = 15)
+```

@@ -1,0 +1,98 @@
+sample,short_ID,species,Site,biogeographic,lat,lon,depth(m),MPA,month,year
+Gb_BS_imp_15O4_s_31,Gb.83,Gb,Barents Sea,Arctic ,71.58797,21.37533,333,No MPA,March,2017
+Gb_BS_imp_18R6_s_38,Gb.84,Gb,Barents Sea,Arctic ,71.58797,21.37533,333,No MPA,March,2017
+Gb_BS_imp_23W4_s_37,Gb.85,Gb,Barents Sea,Arctic ,71.58797,21.37533,333,No MPA,March,2017
+Gb_BS_imp_9I4_s_39,Gb.50,Gb,Barents Sea,Arctic ,71.58797,21.37533,333,No MPA,March,2017
+Gb_BS_unimp_14N5_s_41,Gb.86,Gb,Barents Sea,Arctic ,71.396,16.810333,333,No MPA,March,2017
+Gb_BS_unimp_3C6_s_43,Gb.87,Gb,Barents Sea,Arctic ,71.396,16.810333,333,No MPA,March,2017
+Gb_BS_unimp_4D2_s_40,Gb.88,Gb,Barents Sea,Arctic ,71.396,16.810333,333,No MPA,March,2017
+Gb_BS_unimp_6F4_s_42,Gb.89,Gb,Barents Sea,Arctic ,71.396,16.810333,333,No MPA,March,2017
+Gb_Can_M_Trip8-75.1_d_69,Gb.31,Gb,Paamiut,North Atlantic Boreal,66.80795,-58.667383,903,No MPA,October,2016
+Gb_Can_M_Trip8-75.2_d_70,Gb.32,Gb,Paamiut,North Atlantic Boreal,66.80795,-58.667383,903,No MPA,October,2016
+Gb_Can_M_Trip8-75.3_d_71,Gb.33,Gb,Paamiut,North Atlantic Boreal,66.80795,-58.667383,903,No MPA,October,2016
+Gb_Can_S_15O6_d_75,Gb.34,Gb,Davis Strait,North Atlantic Boreal,62.5184,-59.9705,1332,No MPA,October,2014
+Gb_Can_S_16P6_s_55,Gb.35,Gb,Davis Strait,North Atlantic Boreal,62.56012,-61.3943,568,No MPA,October,2014
+Gb_Can_S_17Q3_d_77,Gb.36,Gb,Davis Strait,North Atlantic Boreal,62.0539,-60.0918,1427,No MPA,October,2014
+Gb_Can_S_23W6_d_78,Gb.37,Gb,Davis Strait,North Atlantic Boreal,61.8989,-60.1364,1440,No MPA,October,2014
+Gb_Can_S_2B6_d_76,Gb.38,Gb,Davis Strait,North Atlantic Boreal,62.0539,-60.0918,1427,No MPA,October,2014
+Gb_Can_S_5E2_s_44,Gb.39,Gb,Davis Strait,North Atlantic Boreal,62.19923,-61.2192,483,No MPA,October,2014
+Gb_Can_S_8H6_s_54,Gb.40,Gb,Davis Strait,North Atlantic Boreal,63.26382,-60.3552,536,No MPA,October,2014
+Gb_FS_MPA_14N4_s_50,Gb.1,Gb,Faroe Shetland Sponge Belt,NE Atlantic,60.83583,-3.03717,525,MPA,August,2018
+Gb_FS_MPA_20T6_s_49,Gb.2,Gb,Faroe Shetland Sponge Belt,NE Atlantic,60.83583,-3.03717,525,MPA,August,2018
+Gb_FS_MPA_22V2_s_51,Gb.3,Gb,Faroe Shetland Sponge Belt,NE Atlantic,60.83583,-3.03717,525,MPA,August,2018
+Gb_NOR_17Q2_s_01,Gb.55,Gb,Norway,NE Atlantic,62.90375,6.87745,38,No MPA,August,2018
+Gb_NOR_18R2_s_02,Gb.56,Gb,Norway,NE Atlantic,62.9033,6.8774,39,No MPA,August,2018
+Gb_NOR_1A7_s_03,Gb.57,Gb,Norway,NE Atlantic,62.90375,6.87745,39,No MPA,August,2018
+Gb_NwK_12L5_s_27,Gb.58,Gb,Norway,NE Atlantic,60.166667,5.175,225,No MPA,August,2018
+Gb_NwK_21U5_s_28,Gb.59,Gb,Norway,NE Atlantic,60.166667,5.175,225,No MPA,August,2018
+Gb_OK_289_d_02,Gb.97,Gb,Orphan Knoll,Open NW Atlantic,50.04158,-45.3794,2745,No MPA,August,2018
+Gb_RSB_MPA_13M4_d_74,Gb.4,Gb,W Rosemary bank,NE Atlantic,59.12883,-10.8078,1304,MPA,September,2016
+Gb_RSB_MPA_13M5_d_72,Gb.5,Gb,W Rosemary bank,NE Atlantic,59.12883,-10.8078,1304,MPA,September,2016
+Gb_RSB_MPA_18R4_d_73,Gb.6,Gb,W Rosemary bank,NE Atlantic,59.12883,-10.8078,1304,MPA,September,2016
+Gb_SRT_1A5_s_23,Gb.60,Gb,Sula Reef,NE Atlantic,63.586117,9.84555,191,No MPA,September,2018
+Gb_SRT_8H5_s_22,Gb.61,Gb,Sula Reef,NE Atlantic,63.586117,9.84555,191,No MPA,September,2018
+Gb_Sva_20T5_s_25,Gb.7,Gb,Svalbard,Arctic,80.5385,15.3616,215,No MPA,September,2016
+Gb_Sva_7G6_s_26,Gb.51,Gb,Svalbard,Arctic,80.53853,15.36161,215,No MPA,September,2011
+Gb_Sw_15O5_s_21,Gb.62,Gb,Sweden,NE Atlantic,58.885,11.100667,89.3,,September,2018
+Gb_Sw_22V6_s_06,Gb.63,Gb,Sweden,NE Atlantic,58.883833,11.0945,89.7,,September,2018
+Gh_Can_M_Trip8-75.5_d_66,Gh.41,Gh,Paamiut,North Atlantic Boreal,66.80795,-58.6674,903,No MPA,October,2016
+Gh_Can_M_Trip8-75.7_d_67,Gh.42,Gh,Paamiut,North Atlantic Boreal,66.80795,-58.6674,903,No MPA,October,2016
+Gh_Can_M_Trip8-75.8_d_68,Gh.43,Gh,Paamiut,North Atlantic Boreal,66.80795,-58.6674,903,No MPA,October,2016
+Gh_Ice_A11-641-B_s_25,Gh.44,Gh,Iceland,North Atlantic Boreal,66.63883,-12.7558,308.5,No MPA,July,2011
+Gh_Ice_ME85-3-1123-2-C_d_59,Gh.45,Gh,Iceland,North Atlantic Boreal,67.214,-26.1992,723.35,No MPA,November,2011
+Gh_Ice_ME85-3-1123-B_d_60,Gh.46,Gh,Iceland,North Atlantic Boreal,67.214,-26.1992,723.35,No MPA,November,2011
+Gh_Ice_ME85-3-1132-A_s_32,Gh.64,Gh,Iceland,North Atlantic Boreal,67.644167,-26.762778,316.8,No MPA,November,2011
+Gh_JMR_DR01-A_d_87,Gh.65,Gh,Jan Mayen Ridge,Arctic,68.2768,-8.819067,1107.5,,November,2019
+Gh_JMR_DR01-B_d_88,Gh.66,Gh,Jan Mayen Ridge,Arctic,68.2768,-8.819067,1107.5,,November,2019
+Gh_JMR_DR01-C_d_89,Gh.67,Gh,Jan Mayen Ridge,Arctic,68.2768,-8.819067,1107.5,,November,2019
+Gh_JMR_DR05-1-A_s_85,Gh.68,Gh,Jan Mayen Ridge,Arctic,68.2768,-8.819067,910.5,,November,2019
+Gh_JMR_DR05-1-B_s_86,Gh.69,Gh,Jan Mayen Ridge,Arctic,68.2768,-8.819067,910.5,,November,2019
+Gh_JMR-SM_AGT03-26_d_93,Gh.47,Gh,Mohn,Arctic,71.30333,-5.28733,1848.5,No MPA,July,2014
+Gh_KS_193.1_d_79,Gh.90,Gh,Karassik Seamount,Arctic,86.858333,61.546833,822.5,,January,2018
+Gh_KS_193.2_d_81,Gh.91,Gh,Karassik Seamount,Arctic,86.858333,61.546833,822.5,,January,2018
+Gh_KS_197.1_s_57,Gh.92,Gh,Karassik Seamount,Arctic,86.858333,61.546833,648,,January,2018
+Gh_KS_200.5_s_58,Gh.93,Gh,Karassik Seamount,Arctic,86.858333,61.546833,648,,January,2018
+Gh_OK_293_d_01,Gh.100,Gh,Orphan Knoll,Open NW Atlantic,50.04158,-45.3794,2745,,September,2014
+Gh_SM_AGT07-22.10_s_28,Gh.70,Gh,Schultz Massif,Arctic,73.826667,7.546667,580,,September,2014
+Gh_SM_AGT07-22.2_s_56,Gh.71,Gh,Schultz Massif,Arctic,73.826667,7.546667,580,,September,2014
+Gh_SM_AGT07-22.3_s_27,Gh.72,Gh,Schultz Massif,Arctic,73.826667,7.546667,580,,September,2014
+Gh_SM_ROV12-11.2_d_29,Gh.73,Gh,Schultz Massif,Arctic,73.7905,6.853167,2959,,September,2014
+Gh_SM_ROV19-11_d_30,Gh.74,Gh,Schultz Massif,Arctic,73.7905,6.853167,1893,,September,2014
+Gh_Sva_100_d_82,Gh.94,Gh,Svalbard,Arctic,78.5837,8.7401,1011,No MPA,November,2019
+Gh_Sva_101_d_84,Gh.95,Gh,Svalbard,Arctic,78.5837,8.7401,1011,No MPA,December,2020
+Gh_Sva_62_s_31,Gh.96,Gh,Svalbard,Arctic,79.6582,7.521,297,No MPA,January,2021
+Gh_Vst_011TVG-004B_d_92,Gh.75,Gh,Vesterisbanken,North Atlantic Boreal,73.614061,-9.035181,1784,No MPA,September,2019
+Gh_Vst_019TVG-003B_d_90,Gh.76,Gh,Vesterisbanken,North Atlantic Boreal,73.488948,-8.968776,1601.5,No MPA,September,2019
+Gh_Vst_019TVG-010B_d_91,Gh.49,Gh,Vesterisbanken,North Atlantic Boreal,73.614061,-9.035181,1784,No MPA,September,2019
+Gh_Vst_045TVG-005B_i_61,Gh.77,Gh,Vesterisbanken,North Atlantic Boreal,72.373805,-11.653801,722,No MPA,September,2019
+Gh_Vst_045TVG-011B_i_62,Gh.78,Gh,Vesterisbanken,North Atlantic Boreal,72.373805,-11.653801,722,No MPA,September,2019
+Gh_Vst_045TVG-012B_i_64,Gh.79,Gh,Vesterisbanken,North Atlantic Boreal,72.373805,-11.653801,722,No MPA,September,2019
+Gh_Vst_080TVG-009B_s_17,Gh.80,Gh,Vesterisbanken,North Atlantic Boreal,73.537318,-9.13196,179,No MPA,September,2019
+Gh_Vst_080TVG-010B_s_18,Gh.81,Gh,Vesterisbanken,North Atlantic Boreal,73.537318,-9.13196,179,No MPA,September,2019
+Gh_Vst_080TVG-013B_s_19,Gh.82,Gh,Vesterisbanken,North Atlantic Boreal,73.537318,-9.13196,179,No MPA,September,2019
+Pv_FS_MPA_01601_s_52,Pv.8,Pv,Faroe Shetland Sponge Belt,NE Atlantic,60.83583,-3.03717,525,MPA,August,2018
+Pv_FS_MPA_01602_s_26,Pv.9,Pv,Faroe Shetland Sponge Belt,NE Atlantic,60.83583,-3.03717,525,MPA,August,2018
+Pv_FS_MPA_01603_s_53,Pv.10,Pv,Faroe Shetland Sponge Belt,NE Atlantic,60.83583,-3.03717,525,MPA,August,2018
+Pv_NoS_11452_s_08,Pv.11,Pv,North of Shetland,NE Atlantic,60.454,0.538,131,No MPA,January,2019
+Pv_NoS_11456_s_22,Pv.12,Pv,North of Shetland,NE Atlantic,61.116,0.175,155,No MPA,January,2019
+Pv_NoS_Notag_s_09,Pv.13,Pv,North of Shetland,NE Atlantic,61.116,0.175,155,No MPA,January,2019
+Pv_NwK_ST5-38_s_29,Pv.14,Pv,Norway,NE Atlantic,59.81359,5.603875,259,No MPA,September,2016
+Pv_NwK_ST5-39_s_30,Pv.15,Pv,Norway,NE Atlantic,59.81359,5.603875,259,No MPA,September,2016
+Pv_RB_11218_s_13,Pv.16,Pv,Rockall Bank,NE Atlantic,57.52475,-13.4195,173.5,No MPA,September,2018
+Pv_RB_11221_s_23,Pv.17,Pv,Rockall Bank,NE Atlantic,57.52475,-13.4195,173.5,No MPA,September,2018
+Pv_RB_1418_s_15,Pv.18,Pv,Rockall Bank,NE Atlantic,57.1705,-13.638,187,No MPA,May,2018
+Pv_RB_1420_s_16,Pv.19,Pv,Rockall Bank,NE Atlantic,57.1705,-13.638,187,No MPA,May,2018
+Pv_RB_MPA_11417_s_20,Pv.20,Pv,Rockall Bank,NE Atlantic,56.7755,-14.4681,189.5,MPA,September,2018
+Pv_RB_MPA_11419_s_21,Pv.21,Pv,Rockall Bank,NE Atlantic,56.7755,-14.4681,189.5,MPA,September,2018
+Pv_RB_MPA_1865_s_24,Pv.22,Pv,Rockall Bank,NE Atlantic,56.905,-14.741,186,MPA,April,2018
+Pv_RB_MPA_1866_s_14,Pv.23,Pv,Rockall Bank,NE Atlantic,56.905,-14.741,186,MPA,April,2018
+Pv_SMK_ROV25-12_s_33,Pv.52,Pv,Troms¿ shelf,NE Atlantic,71.39517,16.81599,330,No MPA,August,2017
+Pv_SMK_ROV25-13_s_35,Pv.53,Pv,Troms¿ shelf,NE Atlantic,71.39517,16.81599,330,No MPA,August,2017
+Pv_SMK_ROV25-14_s_36,Pv.54,Pv,Troms¿ shelf,NE Atlantic,71.39517,16.81599,330,No MPA,August,2017
+Pv_SRT_046-26_s_11,Pv.24,Pv,Sula Reef,NE Atlantic,63.65222,9.758833,203,No MPA,October,2016
+Pv_SRT_046-49_s_12,Pv.25,Pv,Sula Reef,NE Atlantic,63.65222,9.758833,203,No MPA,October,2016
+Pv_SSNd_H044-01642_s_45,Pv.26,Pv,Shetland Shelf North,NE Atlantic,60.106,-4.808,496,No MPA,May,2018
+Pv_SSNd_H044-01643_s_46,Pv.27,Pv,Shetland Shelf North,NE Atlantic,60.106,-4.808,496,No MPA,May,2018
+Pv_SSNd_H044-01645_s_47,Pv.28,Pv,Shetland Shelf North,NE Atlantic,60.106,-4.808,496,No MPA,May,2018
+Pv_Sw_11_s_05,Pv.29,Pv,Sweden,NE Atlantic,58.89083,11.09502,90,No MPA,March,2019
+Pv_Sw_9_s_04,Pv.30,Pv,Sweden,NE Atlantic,58.89083,11.09502,90,No MPA,March,2019
