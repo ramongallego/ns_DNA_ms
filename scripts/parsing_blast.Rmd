@@ -1,0 +1,207 @@
+---
+title: "Parsing BLAST"
+output: html_notebook
+editor_options: 
+  chunk_output_type: inline
+---
+
+We have successfully BLASTed our sequences and now we want to recover the taxonomical information associated with each search
+
+```{r}
+library(tidyverse)
+library(insect)
+library(taxonomizr)
+```
+
+## DO it once: get the insect::taxonomy
+
+That file is too big for github. It takes a while to download and build it as a dataframe. But you only have to do this once - later you run the second chunk and load the object. 
+
+```{r, eval=FALSE}
+taxonomy.now <- insect::taxonomy()
+
+write_rds(taxonomy.now, here("input/taxonomy.rds"))
+```
+
+## Launch a search against a local copy of BLAST
+
+This is probably too demanding to ask anybody to download the whole of the nt database, install the blast toolkit and run it. But if you do, the command we used to get the best blast matches is the following
+
+```
+blastn \
+-query input.fasta \
+-db nt \
+-num_threads $cores \
+-perc_identity 75 \
+-word_size 11 \
+-evalue 1e-23 \
+-max_target_seqs 100 \
+-outfmt "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore staxids qlen" \
+-out output.txt
+```
+
+
+## Load the blast_output
+
+```{r}
+
+#taxonomy.now <- read_rds("../data/taxonomy.rds")
+taxonomy.now <- read_rds(here("input","taxonomy.rds"))
+
+#blast_output <- "../pipeline_output/hash_key_221103.txt"
+blast_output <- "hash_key_221103.txt"
+
+BLAST_results <- read_table(here("output", blast_output), col_names = c("qseqid", "sseqid",  "pident", "length" ,"mismatch", "gapopen" ,"qstart","qend", "sstart", "send" ,"evalue" ,"bitscore", "staxid", "qlen"))
+
+
+# Many taxids will be repeated, do it only once
+
+BLAST_results %>%
+  separate_rows(staxid, sep = ";") -> BLAST_results
+
+BLAST_results %>%
+distinct(staxid) -> ALL.TAXIDS
+
+
+# Get the lineages for all matches
+
+ALL.TAXIDS %>%
+  rename(taxID = 1) %>%
+  mutate(taxID = as.numeric(taxID))  %>%
+   mutate(lineage = map(taxID, insect::get_lineage, taxonomy.now)) -> all.lineages
+
+
+
+
+# Save this object, because it takes long time to run this
+# ALL.TAXIDS = 3872
+
+write_rds(all.lineages, here( "output" , glue::glue("lineages_{Sys.Date()}.rds")))
+
+# Make them into a list
+all.lineages %>%
+  pull(lineage) -> all.lineages.list
+
+set_names(all.lineages.list, nm= all.lineages$staxid) -> all.lineages.list
+
+# Remove entries without taxonomy
+all.lineages.list %>% discard(function(x) is.na(x[[1]]) ) ->  all.lineages.list.good
+
+  all.lineages.list.good %>%
+  map(~ bind_cols(.x) %>% mutate (rank = names(.x)) ) %>%
+  bind_rows(.id = "taxID") %>%
+     filter (rank %in% c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) -> all.lineages.long
+
+
+ 
+    all.lineages.long %>% mutate (taxID = as.numeric(taxID)) %>%
+      write_csv( here("output","taxonomies_matches.csv"))
+```
+
+```{r}
+custom.lca <- function (df, cutoff = 90) {df %>%  # this function allows to change cutoff parameters for a specified dataframe (df)
+  group_by(qseqid) %>%
+  select( pident, kingdom, phylum, class, order, family, genus, species) %>%
+  nest() %>% # for each query, calculate the agreed taxonomy
+  # ungroup %>% slice (1:10) %>%
+  mutate(consensus = purrr::map(data,  function(.x) {
+    # If there are 100% matches - keep those and calculate the LCA
+   
+    if (max(.x$pident == 100 )){
+       .x %>%
+        filter(pident == 100) %>%
+        select(-pident) %>%
+        condenseTaxa() %>% # agreement in Phylogeny
+      paste(., collapse = "%")
+      
+    }else{
+       # If there are no 100% matches, then keep things better than our cutoff
+    if(max(.x$pident > cutoff )){
+
+      .x %>%
+        filter(pident > cutoff) %>%
+        select(-pident) %>%
+        condenseTaxa() %>% # agreement in Phylogeny
+      paste(., collapse = "%")
+
+       
+
+    }else{
+      # If there are no matches, better than the cutoff, then keep everything
+      
+    .x %>%
+        select(-pident) %>%
+    condenseTaxa() %>%
+       paste(., collapse = "%")
+      }
+  }
+  }
+  
+  # Collapse all the taxa data separatated by %, como queda feo para leer en excel lo modificamos con # PERO es un lio dejarlo sin el % porq deja la table separada sin heads asi que mejor dejarlo como esta y luego en R separar las columnas por % y asignarles nombres
+  
+  )) %>%
+  select(qseqid, consensus) %>%
+  unnest(consensus)}
+
+```
+
+
+## Apply the function to our data
+
+```{r}
+all.lineages.long <- read_csv(here("output","taxonomies_matches.csv"))
+all.lineages.long %>%
+  rename(name = 2) %>%
+  group_by(taxID, rank) %>%
+  tally() %>%
+  filter (n>1) %>%
+  distinct(taxID) %>%
+  inner_join(BLAST_results %>% mutate (taxID = as.numeric(staxid))) %>%
+  ungroup() %>%
+  distinct(qseqid) %>%
+  inner_join(BLAST_results)
+
+## From all this, we can dismiss the two staxid for which we have two filogenies
+  all.lineages.long %>%
+  # rename(name = 2) %>%
+  group_by(taxID, rank) %>%
+  tally() %>%
+  filter (n==1) %>%
+    select(-n) %>%
+    inner_join(all.lineages.long,.) %>%
+
+pivot_wider(names_from = rank, values_from = 2)-> readytojoin
+```
+3966 taxID and 8 columns
+
+`inner_join` keeps only the blast matches for which there is a lineage. We lose some, but we can check it with 
+```
+BLAST_results %>%
+anti_join(readytojoin,by=c("staxid"="taxID"))
+```
+
+
+
+```{r, warning=F}
+
+BLAST_results %>%
+  mutate(taxID = as.numeric(staxid)) %>%
+  inner_join(readytojoin %>%
+  mutate(taxID = as.numeric(taxID))) -> input
+
+# Store the max pident observed per qseqid
+
+input |> 
+  group_by(qseqid) |> 
+  summarise (max_pident = max(pident)) -> max_pidents
+
+
+custom.lca(input,95) -> finalids
+
+finalids %>%
+  separate(consensus, into = c("kingdom", "phylum", "class", "order", "family", "genus", "species"), sep = "%") %>%
+   inner_join(max_pidents) |> 
+  rename(Hash = 1) %>%
+ 
+  write_csv(here("output","hash_classified_95_100.csv"))
+```

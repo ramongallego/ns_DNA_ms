@@ -1,0 +1,123 @@
+---
+title: "Prepare data for swarm"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(eDNAfuns)
+library(tidyverse)
+library(here)
+
+Metadata_NA <- read_csv(here("output", "metadata.csv"))
+
+ASV_decontaminated <- read_csv(here("output/ASV_table_220.csv")) |> 
+  mutate(sample = str_replace(sample, "/", "-" ),
+         sample = str_remove(sample, "_[F|R]1_filt.fastq.gz")) |> group_by(sample, Hash) |> 
+  summarise (nReads = sum(nReads)) |> 
+  semi_join(Metadata_NA)
+
+  hash_key <- read_csv(here("output","hash_key_220.csv"))
+
+dir.create(here("output", "swarm_input"))    
+  
+ASV_decontaminated |> 
+  group_by(sample) |> 
+  nest() |> 
+  mutate(data = map (data, ~.x |> group_by(Hash) |> summarise (nr = sum(nReads)))) |> 
+  unnest(data) |> 
+  inner_join(hash_key) |> 
+  nest() |> 
+  mutate (write = walk2(sample, data, function (.x, .y){
+    
+    .y |> 
+      unite(Hash, nr, col = "header", sep = ";size=") |> 
+      eDNAfuns::fasta.writer(sequence = Sequence,
+                   header = header, 
+                   file.out = here("output","swarm_input/", paste0(.x, ".fasta")))
+  }))
+
+# dir.create(here("output", "swarm_input", "all.together")) 
+# 
+# ASV_decontaminated |> 
+#   
+#   group_by(Hash) |>
+#   summarise (nr = sum(nReads)) |> 
+#   inner_join(hash_key) |> 
+#       unite(Hash, nr, col = "header", sep = ";size=") |> 
+#       eDNAfuns::fasta.writer(sequence = Sequence,
+#                    header = header, 
+#                    file.out = here("output/swarm_input/all.together/all.together.fasta"))
+```
+
+# Launching swarm
+
+The best way of proceeding is opening a terminal window, and navigate to the folder where all this project is stored (should be /path/to/ns_DNA_ms). There you can run the following command, (given you have installed [swarm](https://github.com/torognes/swarm))
+
+`bash scripts/swarm.sh output/swarm_input`
+
+
+# Parsing swarm results
+
+```{r}
+centroids.paths <- list.files(here("output","swarm_input","centroids"),
+                              pattern = "centroids.fasta") 
+map(centroids.paths, ~insect::readFASTA(here("output","swarm_input","centroids", .x), bin = F)) -> seqs.centroids
+
+seqs.centroids |> 
+  map(~tibble(names = names(.x), seqs = .x)) |> 
+  set_names(nm= centroids.paths)-> centroids
+centroids |> bind_rows(.id = "sample") |> 
+  separate(names, into = c("Hash", "nReads"), sep = ";size=|;", convert = T) |> 
+  mutate(sample = str_remove(sample, ".centroids.fasta")) -> new_ASV
+
+ASV_decontaminated |> ungroup() |> summarise(sum(nReads) ,n_distinct(Hash))
+
+new_ASV |> summarise(sum(nReads), n_distinct(Hash))
+
+new_ASV |> select(sample, Hash, nReads) |>
+  write_csv(here("output", "new_ASV_after_swarm.csv")) 
+```
+
+
+# Add taxonomical information
+
+
+```{r}
+IDs <- read_csv(here("data", "all.hashes.ided.csv"))
+
+anti_join(new_ASV, IDs) |> distinct(Hash)
+  
+ASV_decontaminated |> distinct(Hash)
+
+anti_join(ASV_decontaminated, IDs) |> distinct(Hash)
+
+anti_join(new_ASV, IDs) ->noID
+
+new_ASV |> inner_join(IDs)-> withID
+
+sum(withID$nReads)
+sum(noID$nReads)
+
+withID |> 
+  inner_join(Metadata_NA) |> select(-seqs) |> 
+  group_by_at(vars(-nReads, -Hash) ) |>
+  summarise(nReads = sum(nReads), .groups = "drop")  -> Species_table_after_swarm
+
+withID |> 
+  filter(phylum == "Porifera") |> distinct(Hash, family, genus, species) |> 
+  arrange(family) |> View()
+
+```
+
+
+
+Write_csv and loaded it into the other script
+
+```{r}
+Species_table_after_swarm |> write_csv(here("data", "species_table_after_swarm.csv"))
+```
+
