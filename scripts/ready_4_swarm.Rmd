@@ -3,9 +3,11 @@ title: "Prepare data for swarm"
 output: html_notebook
 ---
 
-This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+DADA2 is really good at solving the sequencing errors produced inside the Illumina machine. But the artificial mutations the 35-odd PCR cycles introduced are not affected by the DADA2 algorithm (Mutated sites will have the same Qscores than non-mutated ones).
 
-Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+We will use swarm with a small d (2) within a sample, to ensure spurious mutants are collapsed into the same OTU. This markdown will prepare the data to run the swarm algorithm within each sample, give you a break so you can launch the script `swarm.sh` and then allow you to parse the results.
+
+## Prepare the data for swarm
 
 ```{r}
 library(eDNAfuns)
@@ -40,17 +42,6 @@ ASV_decontaminated |>
                    file.out = here("output","swarm_input/", paste0(.x, ".fasta")))
   }))
 
-# dir.create(here("output", "swarm_input", "all.together")) 
-# 
-# ASV_decontaminated |> 
-#   
-#   group_by(Hash) |>
-#   summarise (nr = sum(nReads)) |> 
-#   inner_join(hash_key) |> 
-#       unite(Hash, nr, col = "header", sep = ";size=") |> 
-#       eDNAfuns::fasta.writer(sequence = Sequence,
-#                    header = header, 
-#                    file.out = here("output/swarm_input/all.together/all.together.fasta"))
 ```
 
 # Launching swarm

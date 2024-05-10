@@ -82,7 +82,7 @@ write_rds(all.lineages, here( "output" , glue::glue("lineages_{Sys.Date()}.rds")
 all.lineages %>%
   pull(lineage) -> all.lineages.list
 
-set_names(all.lineages.list, nm= all.lineages$staxid) -> all.lineages.list
+set_names(all.lineages.list, nm= all.lineages$taxID) -> all.lineages.list
 
 # Remove entries without taxonomy
 all.lineages.list %>% discard(function(x) is.na(x[[1]]) ) ->  all.lineages.list.good
@@ -137,7 +137,7 @@ custom.lca <- function (df, cutoff = 90) {df %>%  # this function allows to chan
   }
   }
   
-  # Collapse all the taxa data separatated by %, como queda feo para leer en excel lo modificamos con # PERO es un lio dejarlo sin el % porq deja la table separada sin heads asi que mejor dejarlo como esta y luego en R separar las columnas por % y asignarles nombres
+  # Collapse all the taxa data separating fields by %
   
   )) %>%
   select(qseqid, consensus) %>%
@@ -150,27 +150,9 @@ custom.lca <- function (df, cutoff = 90) {df %>%  # this function allows to chan
 
 ```{r}
 all.lineages.long <- read_csv(here("output","taxonomies_matches.csv"))
-all.lineages.long %>%
-  rename(name = 2) %>%
-  group_by(taxID, rank) %>%
-  tally() %>%
-  filter (n>1) %>%
-  distinct(taxID) %>%
-  inner_join(BLAST_results %>% mutate (taxID = as.numeric(staxid))) %>%
-  ungroup() %>%
-  distinct(qseqid) %>%
-  inner_join(BLAST_results)
 
-## From all this, we can dismiss the two staxid for which we have two filogenies
   all.lineages.long %>%
-  # rename(name = 2) %>%
-  group_by(taxID, rank) %>%
-  tally() %>%
-  filter (n==1) %>%
-    select(-n) %>%
-    inner_join(all.lineages.long,.) %>%
-
-pivot_wider(names_from = rank, values_from = 2)-> readytojoin
+    pivot_wider(names_from = rank, values_from = 2) -> readytojoin
 ```
 3966 taxID and 8 columns
 
@@ -186,8 +168,7 @@ anti_join(readytojoin,by=c("staxid"="taxID"))
 
 BLAST_results %>%
   mutate(taxID = as.numeric(staxid)) %>%
-  inner_join(readytojoin %>%
-  mutate(taxID = as.numeric(taxID))) -> input
+  inner_join(readytojoin ) -> input
 
 # Store the max pident observed per qseqid
 
