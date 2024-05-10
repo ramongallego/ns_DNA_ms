@@ -1,15 +1,15 @@
 ---
 title: "Dada2_report"
-author: "Belen_rawdata_trim270_210"
+author: "Ramon Gallego"
 date: ""
 output: html_document
 params:
   folder:
-    value: "input/NCBI_reads"
+    value: "raw_data/NCBI_reads"
   hash:
     value: "yes"
   output:
-    value: "output"
+    value: "input"
 
 ---
 
@@ -38,7 +38,7 @@ path1 <- here(params$folder)
 
 
 
-sample.map <- read_csv(here("input", "metadata.csv"))
+sample.map <- read_csv(here("raw_data", "metadata.csv"))
 
 
 
@@ -154,7 +154,7 @@ errR2 <- learnErrors(filtR2s_good, multithread=TRUE,verbose = 0)
 # Write errors to csv to see if they matter at all
 tosave <- list(errF1, errF2, errR1, errR2)
 
-saveRDS(tosave, file = here("input","all.errors.rds"))
+saveRDS(tosave, file = here("raw_data","all.errors.rds"))
 rm(tosave)
  gc()
 #
@@ -185,8 +185,8 @@ derepF1s <- derepFastq(filtF1s_good, verbose=TRUE)
 derepF2s <- derepFastq(filtF2s_good, verbose=TRUE)
 
 
-write_rds(derepF1s, here("input","derepF1s.rds"))
-write_rds(derepF2s, here("input","derepF2s.rds"))
+write_rds(derepF1s, here("raw_data","derepF1s.rds"))
+write_rds(derepF2s, here("raw_data","derepF2s.rds"))
 rm(derepF2s, derepF1s)
 gc()
 # Now the other half
@@ -195,13 +195,13 @@ rownames(out_Rs) <- FiltRs
 
 derepR1s <- derepFastq(filtR1s_good, verbose=TRUE)
 
- write_rds(derepR1s, here("input","derepR1s.rds"))
+ write_rds(derepR1s, here("raw_data","derepR1s.rds"))
 
 rm(derepR1s)
 gc()
 
 derepR2s <- derepFastq(filtR2s_good, verbose=TRUE)
-write_rds(derepR2s, here("input","derepR2s.rds"))
+write_rds(derepR2s, here("raw_data","derepR2s.rds"))
 rm(derepR2s)
 gc()
 
@@ -217,22 +217,22 @@ gc()
 
 ```{r dadaing, message=FALSE}
 gc()
-derepF1s <- read_rds(here("input","derepF1s.rds"))
+derepF1s <- read_rds(here("raw_data","derepF1s.rds"))
 dadaF1s <- dada(derepF1s, err = errF1, multithread = TRUE)
 rm (derepF1s)
 gc()
 
-derepF2s <- read_rds(here("input","derepF2s.rds"))
+derepF2s <- read_rds(here("raw_data","derepF2s.rds"))
 dadaF2s <- dada(derepF2s, err = errF2, multithread = TRUE)
 rm (derepF2s)
 gc()
 
-derepR1s <- read_rds(here("input","derepR1s.rds"))
+derepR1s <- read_rds(here("raw_data","derepR1s.rds"))
 dadaR1s <- dada(derepR1s, err = errR1, multithread = TRUE)
 rm(derepR1s)
 gc()
 
-derepR2s <- read_rds(here("input","derepR2s.rds"))
+derepR2s <- read_rds(here("raw_data","derepR2s.rds"))
 dadaR2s <- dada(derepR2s, err = errR2, multithread = TRUE)
 rm(derepR2s)
 gc()
@@ -243,7 +243,7 @@ We will start by saving all files to disk.
 ```{r saving to disk}
 
 
-   saveRDS(list( dadaF1s, dadaF2s, dadaR1s,dadaR2s), file = here("input","tosave.rds"))
+   saveRDS(list( dadaF1s, dadaF2s, dadaR1s,dadaR2s), file = here("raw_data","tosave.rds"))
 
 ```
 The pipeline breaks if for some reason there are samples that don't have any reads passing filters
@@ -257,8 +257,8 @@ to.keep.F <- map_lgl(dadaF1s, ~(sum(.x$denoised) > 150)) # Which samples have mo
 to.keep.R <- map_lgl(dadaR1s, ~(sum(.x$denoised) > 150)) #  Which samples have more than 150 reads passing filters in the Rev direction
 
 #to.keep <- (to.keep.F + to.keep.R) == 2 # Keep only those that pass boths filters
-derepF1s <- read_rds(here("input","derepF1s.rds"))
-derepF2s <- read_rds(here("input","derepF2s.rds"))
+derepF1s <- read_rds(here("raw_data","derepF1s.rds"))
+derepF2s <- read_rds(here("raw_data","derepF2s.rds"))
 mergersF <- mergePairs(dadaF1s[to.keep.F],
    derepF1s[to.keep.F],
    dadaF2s[to.keep.F],
@@ -309,8 +309,8 @@ rm(dadaF1s, dadaF2s, derepF1s, derepF2s)
 
 gc()
 
-derepR1s <- read_rds(here("input","derepR1s.rds"))
-derepR2s <- read_rds(here("input","derepR2s.rds"))
+derepR1s <- read_rds(here("raw_data","derepR1s.rds"))
+derepR2s <- read_rds(here("raw_data","derepR2s.rds"))
 mergersR <- mergePairs(dadaR1s[to.keep.R],
    derepR1s[to.keep.R],
    dadaR2s[to.keep.R],

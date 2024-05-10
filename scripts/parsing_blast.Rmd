@@ -1,5 +1,6 @@
 ---
 title: "Parsing BLAST"
+author: "Ramon Gallego"
 output: html_notebook
 editor_options: 
   chunk_output_type: inline
@@ -20,7 +21,7 @@ That file is too big for github. It takes a while to download and build it as a 
 ```{r, eval=FALSE}
 taxonomy.now <- insect::taxonomy()
 
-write_rds(taxonomy.now, here("input/taxonomy.rds"))
+write_rds(taxonomy.now, here("raw_data/taxonomy.rds"))
 ```
 
 ## Launch a search against a local copy of BLAST
@@ -46,12 +47,12 @@ blastn \
 ```{r}
 
 #taxonomy.now <- read_rds("../data/taxonomy.rds")
-taxonomy.now <- read_rds(here("input","taxonomy.rds"))
+taxonomy.now <- read_rds(here("raw_data","taxonomy.rds"))
 
 #blast_output <- "../pipeline_output/hash_key_221103.txt"
 blast_output <- "hash_key_221103.txt"
 
-BLAST_results <- read_table(here("output", blast_output), col_names = c("qseqid", "sseqid",  "pident", "length" ,"mismatch", "gapopen" ,"qstart","qend", "sstart", "send" ,"evalue" ,"bitscore", "staxid", "qlen"))
+BLAST_results <- read_table(here("input", blast_output), col_names = c("qseqid", "sseqid",  "pident", "length" ,"mismatch", "gapopen" ,"qstart","qend", "sstart", "send" ,"evalue" ,"bitscore", "staxid", "qlen"))
 
 
 # Many taxids will be repeated, do it only once
@@ -76,7 +77,7 @@ ALL.TAXIDS %>%
 # Save this object, because it takes long time to run this
 # ALL.TAXIDS = 3872
 
-write_rds(all.lineages, here( "output" , glue::glue("lineages_{Sys.Date()}.rds")))
+write_rds(all.lineages, here( "input" , glue::glue("lineages_{Sys.Date()}.rds")))
 
 # Make them into a list
 all.lineages %>%
@@ -95,7 +96,7 @@ all.lineages.list %>% discard(function(x) is.na(x[[1]]) ) ->  all.lineages.list.
 
  
     all.lineages.long %>% mutate (taxID = as.numeric(taxID)) %>%
-      write_csv( here("output","taxonomies_matches.csv"))
+      write_csv( here("input","taxonomies_matches.csv"))
 ```
 
 ```{r}
@@ -149,7 +150,7 @@ custom.lca <- function (df, cutoff = 90) {df %>%  # this function allows to chan
 ## Apply the function to our data
 
 ```{r}
-all.lineages.long <- read_csv(here("output","taxonomies_matches.csv"))
+all.lineages.long <- read_csv(here("input","taxonomies_matches.csv"))
 
   all.lineages.long %>%
     pivot_wider(names_from = rank, values_from = 2) -> readytojoin
@@ -184,5 +185,5 @@ finalids %>%
    inner_join(max_pidents) |> 
   rename(Hash = 1) %>%
  
-  write_csv(here("output","hash_classified_95_100.csv"))
+  write_csv(here("input","hash_classified_95_100.csv"))
 ```
