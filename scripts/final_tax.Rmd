@@ -1,0 +1,353 @@
+---
+title: "Combining taxonomies"
+output: html_notebook
+---
+
+If there is one thing we believe in, are the classifications curated by Ana and Belén from Porifera, Chordata and Echinodermata.
+
+
+
+```{r}
+ASV.last <- read_csv(here("data", "new_ASV_after_swarm.csv"))
+
+Hash.clas.last <- read_csv(here("data", "Hash_ids_NorthAtlantic.csv"))
+
+taxonomy.cols <- colnames(Hash.clas.last[-1])
+
+Hash.clas.last |> 
+  mutate(precision = case_when(species == "NA" & genus == "NA" & family !="NA" ~ "family",
+                                species == "NA" & genus != "NA" & family !="NA" ~ "genus",
+                                species != "NA" & genus != "NA" & family !="NA" ~ "species")) |> 
+  semi_join(ASV.last) |>
+  select(Hash, precision) -> precision
+ Hash.clas.last |> 
+  unite (-Hash, col = "taxa", sep = "%") -> Hash.clas.last
+ 
+ Hashes.Seqs <- read_csv(here("data/hash_key_220.csv"))
+```
+
+
+```{r}
+Hash.clas.last |> 
+   ungroup() |> 
+   filter (str_detect(taxa, "Chordata")) |> 
+   distinct(taxa) |> arrange(taxa) |> separate(taxa, into = taxonomy.cols, sep = "%", remove = F)
+
+# Callionymiformes vs Syngnathiformes
+
+Hash.clas.last |> 
+  mutate(taxa = str_replace(taxa, "Syngnathiformes", "Callionymiformes")) -> Hash.clas.last
+# Helicolenus appears duplicated
+ Hash.clas.last |> 
+   filter (str_detect(taxa, "Helicolenus")) |> slice(1) |> pull(taxa) -> Helicolenus
+
+  Hash.clas.last |> 
+    filter (str_detect(taxa, "Helicolenus")) |> 
+    mutate(taxa = Helicolenus) -> Helicolenus
+# Lycodes has conflicting taxonomy  
+   Hash.clas.last |> 
+    filter (str_detect(taxa, "Lycodes")) |> 
+     separate(taxa, into = taxonomy.cols, sep = "%") |> 
+     mutate(order = "Perciformes") |> 
+     unite(-Hash, col = "taxa", sep = "%")-> Lycodes
+# Scomber appears duplicated
+  Hash.clas.last |> 
+    filter (str_detect(taxa, "Scomber")) |> 
+    mutate(taxa = "Metazoa%Chordata%Actinopteri%Scombriformes%Scombridae%Scomber%Scomber scombrus") -> Scomber
+
+#   
+  
+## Revisit NAs from Echinodermata
+  
+  Hash.clas.last |> 
+    filter (str_detect(taxa, "Echinodermata")) |> 
+    filter (str_detect(taxa, "NA")) |> 
+    left_join(Hashes.Seqs) |> 
+    eDNAfuns::fasta.writer(sequence = Sequence, header = Hash, file.out = here("data", "Echinodermata_na.fasta"))
+
+  ## Revisit NAs from Porifera
+  
+  Hash.clas.last |> 
+    filter (str_detect(taxa, "Porifera")) |> 
+     filter (str_detect(taxa, "NA")) |> 
+    left_join(Hashes.Seqs) |> 
+    eDNAfuns::fasta.writer(sequence = Sequence, header = Hash, file.out = here("data", "Porifera_na.fasta"))
+  
+ Hash.clas.last |> 
+   inner_join(ASV.last) |> 
+   
+   
+    filter (str_detect(taxa, "Porifera")) |> 
+     filter (str_detect(taxa, "Geodia")) |> 
+   filter (!str_detect(taxa, "barretti|hentscheli|parva")) |> 
+   group_by(Hash, taxa ) |> 
+   summarise(nr = sum(nReads)) |> 
+   left_join(Hashes.Seqs) |> 
+   mutate(len = str_length(Sequence)) |> 
+   arrange(taxa) |> 
+   separate(taxa, into = taxonomy.cols, sep = "%") |> 
+   mutate(species = str_replace_all(species, " ", "_"), 
+            header = paste0(str_sub(Hash, 1, 10),";organism=",species)) |> 
+    eDNAfuns::fasta.writer(sequence = Sequence, header = header, file.out = here("data", "Porifera_geodia.fasta")) 
+  
+  ## Run them in bold and compare results
+  
+    bolds <- read_csv2(here("data/BOLD/parsed_echino_porifera.csv"))
+    
+   Hash.clas.last |> 
+    filter (str_detect(taxa, "Echinodermata|Porifera")) |> 
+    filter (str_detect(taxa, "NA")) |> 
+     left_join(bolds) |> 
+     mutate (precision.bold = case_when(is.na(species) & is.na(genus) & !is.na(family) ~ "family",
+                                        is.na(species) & !is.na(genus) & !is.na(family) ~ "genus",
+                                        !is.na(species) & !is.na(genus) & !is.na(family) ~ "species")) |> 
+     unite(kingdom, phylum, class, order, family, genus, species,col = "taxa.bold", sep = "%") |> 
+     separate(taxa, into = taxonomy.cols, sep = "%", remove = F) |> 
+     mutate (precision.blast = case_when(species == "NA" & genus == "NA" & family !="NA" ~ "family",
+                                species == "NA" & genus != "NA" & family !="NA" ~ "genus",
+                                species != "NA" & genus != "NA" & family !="NA" ~ "species")) |> 
+     mutate(final.id = case_when(precision.bold == "species" ~ taxa.bold,
+                                 precision.bold == "genus" ~ taxa.bold,
+                                 precision.blast== "family"~ taxa,
+                                 precision.bold == "family"~ taxa.bold,
+                                 TRUE                      ~ taxa)) |> 
+     select(Hash, taxa = final.id) -> Echino_and_porifera
+
+```
+
+
+```{r}
+
+  Helicolenus |> 
+  bind_rows(Lycodes) |> 
+  bind_rows(Scomber) |> 
+  bind_rows(Echino_and_porifera) -> improved
+ # nothing shared between efforts
+
+
+
+Hash.clas.last |> 
+  anti_join(improved, by = "Hash") |> 
+  bind_rows(improved) -> Hash.clas.last
+
+## What THings have we blasted
+
+last.blast <- read_csv(here("pipeline_output","hash_classified_2023_97_100.csv"))
+
+### Keep the improved
+
+miscellaneous.bold <- read_csv(here("data", "BOLD", "miscellaneous.bold.csv"))
+
+miscellaneous.bold |> 
+  semi_join(improved, by = "Hash")
+
+## HAsh clas, keep only CHordata, Ehcino, porifera
+
+Hash.clas.last |> 
+  ungroup() |> 
+   filter (str_detect(taxa, "Chordata|Echinodermata|Porifera")) -> goods
+
+last.blast |> 
+  anti_join(goods, by = "Hash") |> 
+  unite(-Hash, col = "taxa", sep = "%") |> 
+  bind_rows(goods) -> almost_there 
+  
+# What to do with the bolds
+
+almost_there |> 
+anti_join(miscellaneous.bold, by = "Hash") |> 
+  bind_rows(miscellaneous.bold) -> done
+  
+  
+  
+ASV.last |> group_by(Hash) |> summarise ( nr = sum(nReads) ) |> inner_join(Hashes.Seqs) |> mutate(len = str_length(Sequence)) |> inner_join(done)  |>
+  group_by(str_detect(taxa, "NA|NA|NA|NA|NA|NA") ) |> summarise(n(), sum(nr))
+
+ASV.last |> group_by(Hash) |> summarise ( nr = sum(nReads) ) |> inner_join(Hashes.Seqs) |> mutate(len = str_length(Sequence)) |> anti_join(done)  |> summarise(n(), sum(nr))
+
+
+```
+Geodia sp. is actually two OTUs: most of them are G. barretti, there is a different one with 304 bp
+
+```{r}
+done |> 
+  filter (str_detect(taxa, "Geodia sp.$")) |> 
+  separate(taxa, into = taxonomy.cols, sep = "%") |> 
+  mutate(species = case_when(Hash == "ca1f1d837d711a86099cf35047ef511cc30d64b4"~ "Geodia sp. 2 PC-2011",
+                             TRUE                                              ~ "Geodia barretti") ) |> 
+  select(Hash, taxonomy.cols) |> 
+  unite(-Hash, col = "taxa", sep = "%") -> gsp
+ 
+```
+
+Geodia sp. 2 are actually a whole bunch of things. Two of them are only one bp apart, and we can consider them the same thing. 
+BLAST puts them in between phelagrei, vaubani y parva. BOLD has them to phelagrei.     
+
+```{r}
+tricky.geodias <- read_csv2(here("data/BOLD/parsed_porifera.csv"))
+
+tricky.geodias |> 
+  replace_na(list (species= "sp.")) |> 
+  unite(genus, species, col = "species", sep = " ", remove = F) |> 
+  select(Hash, taxonomy.cols) |> 
+  unite(-Hash, col = "taxa", sep = "%") |> 
+  slice (1:14) -> gsp2
+
+gsp |> 
+  bind_rows(gsp2) %>%
+  anti_join(done,., by= "Hash") |> 
+  bind_rows(gsp) |> 
+  bind_rows(gsp2) -> done_and_dusted
+
+## We forgot to rejoin with the Hash.clas.last
+
+Hash.clas.last |> 
+  unite(taxonomy.cols, col = "taxa", sep = "%") |> 
+  anti_join(done_and_dusted, by = "Hash") |> 
+  bind_rows(done_and_dusted) |> 
+  write_csv(here("data/final_id_2023_on_Friday.csv"))
+```
+
+# Update on aug 2023
+
+For Chordata, Cnidaria, Porifera and Echinodermata, if we have a genus but reached no conclussion on species, the species field would be genus sp.
+
+```{r}
+taxonomies <- read_csv(here("data/final_id_2023_on_Friday.csv"))
+
+taxonomies |> 
+  separate(taxa, into = taxonomy.cols, sep = "%") |> 
+  filter (phylum %in% c("Chordata","Echinodermata", "Porifera", "Cnidaria")) |> 
+  mutate (species = case_when(species != "NA" ~ species,
+                              genus != "NA"   ~ paste0(genus, " sp."),
+                              genus == "NA"   ~ species)) |> 
+  unite (taxonomy.cols, col = "taxa", sep = "%")-> updated.tax
+
+taxonomies |> 
+  anti_join(updated.tax, by = "Hash") |> 
+  bind_rows(updated.tax) |> write_csv(here("data/final_id_Aug_2023.csv"))
+
+```
+
+## Appartently we are not done yet
+
+There are some instances in which we have done order sp. or family sp.
+
+```{r}
+taxonomies <- read_csv(here("data/final_id_Aug_2023.csv"))
+
+taxonomies |> 
+  separate(taxa, into = taxonomy.cols, sep = "%") |>  
+  filter (genus == "NA" & str_detect(species, "sp."))
+
+taxonomies |> 
+  mutate (taxa = case_when(str_detect(taxa, "Poraniidae%NA")    ~ "Metazoa%Echinodermata%Asteroidea%Valvatida%Poraniidae%Porania%Porania sp.",
+                           str_detect(Hash, "10cba565eed241d964cdcef6ae7ec2334433ed4e") ~ "Metazoa%Porifera%Demospongiae%Tetractinellida%Geodiidae%Geodia%Geodia sp. 1",
+                            str_detect(Hash, "ca1f1d837d711a86099cf35047ef511cc30d64b4") ~ "Metazoa%Porifera%Demospongiae%Tetractinellida%Geodiidae%Geodia%Geodia sp. 2",
+                           str_detect(taxa, "Pennatulidae%NA%NA")~ "Metazoa%Cnidaria%Anthozoa%Pennatulacea%Pennatulidae%Ptilella%Ptilella grayi",
+                           str_detect(taxa, "Pennatulacea%NA%NA%NA")~"Metazoa%Cnidaria%Anthozoa%Scleralcyonacea%Funiculinidae%Funiculina%Funiculina quadrangularis",
+                            str_detect(taxa, "Funiculina")      ~"Metazoa%Cnidaria%Anthozoa%Scleralcyonacea%Funiculinidae%Funiculina%Funiculina quadrangularis",
+                           str_detect(taxa, "Hygrosoma")        ~ "Metazoa%Echinodermata%Echinoidea%Echinothurioida%Echinothuriidae%Hygrosoma%Hygrosoma sp.",
+                           str_detect(taxa, "Phyrella")         ~ "Metazoa%Echinodermata%Holothuroidea%Dendrochirotida%Phyllophoridae%Molpadia%Molpadia borealis",
+                           str_detect(taxa, "Astropecten")      ~ "Metazoa%Echinodermata%Asteroidea%Paxillosida%Astropectinidae%Astropecten%Astropecten irregularis",
+                           str_detect(taxa, "Phyllophoridae%NA")~ "Metazoa%Echinodermata%Holothuroidea%Dendrochirotida%Phyllophoridae%Pentamera%Pentamera calcigera",
+                           str_detect(taxa, "Rossellidae%NA")   ~ "Metazoa%Porifera%Hexactinellida%Lyssacinosida%Rossellidae%Caulophacus%Caulophacus arcticus",
+                           str_detect(Hash, "bb0da6fd980e9935e8ec148f209bfaaa0d62fac1")   ~ "Metazoa%Porifera%Demospongiae%Poecilosclerida%Hymedesmiidae%Hymedesmia%Hymedesmia primitiva",
+                           str_detect(taxa, "Niphatidae")       ~ "Metazoa%Porifera%Demospongiae%Haplosclerida%Niphatidae%NA%Niphatidae sp.",
+                           str_detect(taxa, "Clytia sp.")       ~ "Metazoa%Cnidaria%Hydrozoa%Leptothecata%Campanulariidae%Clytia%Clytia sp.",
+                           str_detect(Hash, "baeef57023d47979237aa78cbd47e50b468abb70") ~ "Metazoa%Cnidaria%Anthozoa%Alcyonacea%Isididae%Acanella%Acanella arbuscula",
+                           str_detect(Hash, "77bfcabb7ed93ce22017b19f41c8b7692a0a5852") ~ "Metazoa%Cnidaria%Anthozoa%Alcyonacea%Alcyoniidae%Anthomastus%Anthomastus grandiflorus",
+                           str_detect(Hash, "d3d38edc5742e249f9fe56a5a427e5f2fd02a830") ~ "Metazoa%Cnidaria%Anthozoa%Actiniaria%Actinostolidae%Maractis%Maractis sp.",
+                           str_detect(Hash, "bd45a6fefa56c886f2a7a45d03c1a270bdb40caa") ~ "Metazoa%Cnidaria%Anthozoa%Actiniaria%Actinostolidae%Actinostola%Actinostola sp.",
+      TRUE                                 ~ taxa
+                           )) -> taxonomies
+  # filter (str_detect(taxa, "Poraniidae%NA")) |> 
+  # mutate (taxa = "Metazoa%Echinodermata%Asteroidea%Valvatida%Poraniidae%Porania%Porania sp.") -> Porania
+
+# taxonomies |> 
+#   filter (str_detect(taxa, "Hygrosoma")) |> 
+#   mutate (taxa = "Metazoa%Echinodermata%Echinoidea%Echinothurioida%Echinothuriidae%Hygrosoma%Hygrosoma sp.")-> Hygrosoma
+
+# taxonomies |> 
+#   filter (str_detect(taxa, "Phyrella"))|> 
+#   mutate (taxa = "Metazoa%Echinodermata%Holothuroidea%Dendrochirotida%Phyllophoridae%Molpadia%Molpadia borealis")-> Molpadia
+
+# taxonomies |> 
+#   filter (str_detect(taxa, "Astropecten")) |> 
+#   mutate (taxa = "Metazoa%Echinodermata%Asteroidea%Paxillosida%Astropectinidae%Astropecten%Astropecten irregularis") -> Astropecten
+
+# taxonomies |> 
+#   filter (str_detect(taxa, "Phyllophoridae%NA")) |> 
+#   mutate (taxa = "Metazoa%Echinodermata%Holothuroidea%Dendrochirotida%Phyllophoridae%Pentamera%Pentamera calcigera")-> Pentamera
+
+# Porifera
+# 
+# taxonomies |> 
+#   filter (str_detect(taxa, "Rossellidae%NA")) |> 
+#    mutate (taxa = "Metazoa%Porifera%Hexactinellida%Lyssacinosida%Rossellidae%Caulophacus%Caulophacus arcticus")-> Pentamera
+
+# taxonomies |> 
+#   filter (str_detect(Hash, "bb0da6fd980e9935e8ec148f209bfaaa0d62fac1")) |> 
+#   mutate (taxa = "Metazoa%Porifera%Demospongiae%Poecilosclerida%Hymedesmiidae%Hymedesmia%Hymedesmia primitiva")-> Pentamera
+
+# taxonomies |> 
+#   separate(taxa, into = taxonomy.cols, sep = "%") |> 
+#   filter(family != "NA" & genus == "NA" & species == "NA") |> 
+#   filter (kingdom == "Metazoa") |> View()
+ 
+  
+
+
+taxonomies |> 
+  filter (str_detect(taxa, "Cnidaria")) |> 
+  separate(taxa, into = taxonomy.cols, sep = "%") |> 
+  filter(genus == "NA" & species == "NA" & family != "NA") |> 
+  filter (family %in% c("Sphaerocorynidae","Gorgoniidae", "Oceaniidae", "Actiniidae", "Pandeidae", "Gonactiniidae" )) |> 
+  mutate (species = paste0(family , " sp.")) |> 
+  unite (taxonomy.cols, col = "taxa", sep = "%") -> news
+
+taxonomies |> 
+  anti_join(news, by = "Hash") |> 
+  bind_rows(news) -> taxonomies
+  
+taxonomies |> 
+  filter (str_detect(taxa, "Cnidaria")) |> 
+  separate(taxa, into = taxonomy.cols, sep = "%") |> 
+  filter(genus == "NA" & species == "NA" & order != "NA" ) |> 
+  semi_join(ASV.last) |> 
+  mutate (species = paste0(order , " sp.")) |> 
+  unite (taxonomy.cols, col = "taxa", sep = "%") -> news
+
+# news |> 
+# inner_join(Hashes.Seqs) |> 
+#   fasta.writer(sequence = Sequence, header = Hash, file.out = here("nofam.fa"))
+# 
+
+taxonomies |> 
+  anti_join(news, by = "Hash") |> 
+  bind_rows(news) -> taxonomies
+
+# taxonomies |> 
+#   filter (str_detect(taxa, "Pennat")) |> 
+#   filter (str_detect(taxa, "NA")) |> 
+#   inner_join(Hashes.Seqs) |> 
+#   fasta.writer(sequence = Sequence, header = Hash, file.out = here("Pennatulaceas.fa"))
+# 
+# taxonomies |> 
+#   filter (str_detect(taxa, "Penna")) |> 
+#   inner_join(ASV.last)
+# 
+# 
+taxonomies |>
+  filter (str_detect(Hash, "bd45a6fefa56c886f2a7a45d03c1a270bdb40caa")) |>
+  inner_join(ASV.last)
+
+taxonomies |>
+  filter (str_detect(taxa, "Clytia sp.")) |>
+  inner_join(ASV.last)
+```
+```{r}
+taxonomies |> 
+  write_csv(here("data/taxonomies_2023_08_18.csv"))
+```
+

@@ -1,0 +1,110 @@
+---
+title: "Generating combined dataset without host"
+output: html_notebook
+---
+
+
+```{r}
+library (here)
+library(tidyverse)
+library(insect)
+
+```
+
+```{r}
+final_hash_id <- read_csv(here("data/Input_files/Hash_ids_NorthAtlantic.csv")) |> 
+  filter (is.na(taxa)) |> select(-taxa) |> unite(-Hash, col= "taxa", sep = "|") |> 
+  bind_rows(read_csv(here("data/Input_files/Hash_ids_NorthAtlantic.csv")) |> 
+                       filter (!is.na(taxa) ) |> 
+              select(Hash, taxa))
+
+
+taxonomy_cols <-c("kingdom", "phylum",  "class" ,  "order"  , "family"  ,"genus",   "species")
+
+final_hash_id
+
+final_ASV <- read_csv(here("data/new_ASV_after_swarm.csv"))
+
+final_metadata <- read_csv(here("data/metadata_north_atlanctic.csv")) |> 
+  mutate (Host_name = case_when (Host == "Gb" ~"Geodia barretti",
+                                 Host == "Gg" ~"Geodia barretti",
+                                 Host == "Gp" ~ "Geodia parva",
+                                 Host == "Gh" ~"Geodia hentscheli",
+                                 Host == "Pv" ~"Phakellia ventilabrum"))
+        
+taxonomy_cols
+
+```
+
+## Combine the three datasets
+
+```{r}
+final_hash_id |> 
+   separate(taxa, into = taxonomy_cols, sep = "\\|") |> 
+ 
+  filter (class != "Mammalia") |> 
+  filter (class != "Aves") |> 
+   unite(-Hash, col = "taxa", sep = "|") -> final_hash_id
+
+final_ASV |>  
+  inner_join(final_hash_id) |> 
+  group_by(sample, taxa) |> 
+  summarise (nReads = sum(nReads)) |>   ungroup() |> summarise(sum(nReads))
+  inner_join(final_metadata) |> 
+  separate(taxa, into = taxonomy_cols, sep = "\\|") |> ungroup() |> summarise(sum(nReads))
+  # filter (kingdom == "Metazoa") |> 
+  filter (species != Host_name) |> ungroup() |> summarise(sum(nReads))
+  write_csv(here("data/combined_dataset_NO_HOST.csv"))
+ 
+
+```
+
+## Improving taxonomical annotation using BOLD
+
+```{r}
+Bold_ids <- read_delim(here("data/IDEngine_Results_Summary.xls"), delim = "\t") |> 
+  separate (`Search DB` , into = c(NA,"coverage", "pident"), sep = "\t"  )
+taxonomy <- read_rds(here("data", "taxonomy.rds"))
+Bold_ids |> 
+  rename (name = 2) |> 
+  filter (name != "No match")  |> 
+  inner_join(taxonomy) |> 
+  pull(taxID) |> 
+  map(insect::get_lineage, taxonomy) -> new.lineages
+
+Bold_ids |> 
+  rename (name = 2) |> 
+  filter (name != "No match")  |> 
+  inner_join(taxonomy) |> 
+   pull(taxID) %>% set_names(x = new.lineages, nm = .) -> new.lineages
+
+new.lineages |> 
+  map_dfr(~ bind_cols(.x) |>  mutate (rank = names(.x)) ,.id = "taxID") -> all.lineages.long
+  
+all.lineages.long |> 
+     filter (rank %in% c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) |> 
+     mutate (taxID = as.numeric(taxID)) |> rename (name = 2) |> 
+  pivot_wider(names_from = rank, values_from = name) |> 
+  left_join(Bold_ids |> 
+  rename (name = 2) |> 
+  filter (name != "No match")  |> 
+  inner_join(taxonomy|> select(name, taxID))  ) |> 
+  select(Hash = `Query ID` ,kingdom, phylum, class, order, family, genus, species) -> newids
+
+final_hash_id |> 
+  anti_join(newids) |> 
+  bind_rows(newids) |> write_csv(here("data/Input_files/Hash_ids_NorthAtlantic.csv"))
+```
+
+Reference Geodias
+
+```{r}
+
+final_ASV |> 
+  inner_join(final_hash_id, by = "Hash") |> 
+  inner_join(final_metadata) |> 
+  separate(taxa, into = taxonomy_cols, sep = "\\|") |> 
+  filter (genus == "Geodia") |> 
+  distinct(Hash, species)
+```
+

@@ -1,0 +1,338 @@
+---
+title: "Refining taxonomical assignments"
+output: html_notebook
+editor_options: 
+  chunk_output_type: console
+---
+Some problems with the taxonomical IDs
+
+Take the last iteration of the files.
+
+Add the info we have gotten from BOLD
+
+For those with low quality matches, translate the sequences and make a blast of those translations - this will give us an accurate if not very precise taxonomical information
+
+```{r}
+library(here)
+library(tidyverse)
+library(taxonomizr)
+library(insect)
+
+ASV.last <- read_csv(here("data", "new_ASV_after_swarm.csv"))
+Hash.clas.last <- read_csv(here("data", "Hash_ids_NorthAtlantic.csv"))
+taxonomy.cols <- colnames(Hash.clas.last[-1])
+Hash.clas.last |> 
+  mutate(precision = case_when(species == "NA" & genus == "NA" & family !="NA" ~ "family",
+                                species == "NA" & genus != "NA" & family !="NA" ~ "genus",
+                                species != "NA" & genus != "NA" & family !="NA" ~ "species")) |> 
+  semi_join(ASV.last) |> select(Hash, precision) -> precision
+ Hash.clas.last |> 
+  unite (-Hash, col = "taxa", sep = "%") -> Hash.clas.last 
+
+Hash.clas.last |> 
+   semi_join(ASV.last) |> 
+ left_join(ids_thresholds[[2]] %>% 
+  dplyr::rename(Hash =1)) |> 
+  # filter (str_detect(taxa, "Chordata")) |> 
+  distinct(taxa, consensus) |> View()
+# 
+
+
+
+
+
+Metadata.last  <- read_csv(here("data/metadata_north_atlanctic.csv")) |> 
+  mutate (Host_name = case_when (Host == "Gb" ~"Geodia barretti",
+                                 Host == "Gp" ~ "Geodia parva",
+                                 Host == "Gh" ~"Geodia hentscheli",
+                                 Host == "Pv" ~"Phakellia ventilabrum"))
+
+Hashes.Seqs <- read_csv(here("data/hash_key_220.csv"))
+
+taxonomy <- read_rds(here("data", "taxonomy.rds"))
+
+lineages <- read_rds(here("data", "lineages_2023_07_03.rds"))
+
+```
+
+Find all the data from BOLD
+
+```{r}
+bolds <- list.files(path = here("data/BOLD"), full.names = T) |> map(~read_delim(.x, delim = "\t", col_types = c("cccii"))) |> bind_rows() |> separate (`Search DB`, into = c("SearchDB", "bestID", "worstID"), sep = "\t")
+
+bolds |> 
+  # filter (`Best ID` != "No match") |> 
+  select (1:5) |> 
+  select (Hash = 1, name = 2 ) |> 
+  separate(Hash, into = "Hash", sep = ";") -> Bold_ids
+
+Bold_ids |> 
+  left_join(taxonomy) |> 
+  distinct(taxID) |> 
+  filter (!is.na(taxID)) |> 
+  pull()  %>% 
+  set_names(., nm =.) |> 
+  map(~get_lineage(.x, db = taxonomy)) |> 
+  map_dfr(~ bind_cols(.x) |>  mutate (rank = names(.x)) ,.id = "taxID") -> lineages.bold
+
+
+lineages.bold |> 
+     filter (rank %in% c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) |> 
+  pivot_wider(names_from = rank, values_from = 2) |> 
+  mutate(taxID = as.numeric(taxID)) |> 
+  right_join(Bold_ids |> 
+              left_join(taxonomy) |> 
+              select(Hash,taxID )) |> 
+  select(-taxID) |> 
+  unite(-Hash, col = "taxa", sep = "|") |> 
+  select(Hash, taxa) -> newIDs.BOLD
+
+newIDs.BOLD |> write_csv(here("data", "BOLD", "miscellaneous.bold.csv"))
+  
+```
+BLASTx searches
+
+```{r}
+output <- read_delim(here("data/blastx/output.txt"), 
+     delim = "\t", escape_double = FALSE, 
+     col_names = c("qseqid", "sseqid",  "pident", "length" ,"mismatch", "gapopen" ,"qstart","qend", "sstart", "send" ,"evalue" ,"bitscore", "staxid", "qlen"), trim_ws = TRUE)
+
+# Bring the previous lineages we used in this project
+# 
+# lineages1<- read_rds(here("data/lineages_2023-04-21.rds"))
+# lineages2<- read_rds(here("data/lineages_2023-04-19.rds"))
+# lineages3 <- read_csv(here("data/taxonomies_matches_today.csv"))
+# 
+# 
+# # lineages 3 has almost all the info
+# 
+# output |> 
+#   filter (pident > 90) |> 
+#   separate_rows(staxid, sep = ";", convert = T) |> 
+#   distinct(staxid) |> 
+#   dplyr::rename(taxID = 1) |> 
+#   anti_join(lineages) |> 
+#   pull() |> 
+#   map(insect::get_lineage, taxonomy) -> new.lineages
+# 
+# new.lineages <- set_names(x = new.lineages, nm = output |> 
+#   filter (pident > 90) |> 
+#   separate_rows(staxid, sep = ";", convert = T) |> 
+#   distinct(staxid) |> 
+#   dplyr::rename(taxID = 1) |> 
+#   anti_join(lineages3) |> 
+#   pull())
+# 
+# new.lineages %>% discard(function(x) is.na(x[[1]]) ) ->  new.lineages.good
+# 
+# new.lineages.good|> 
+#   map_dfr(~ bind_cols(.x) |>  mutate (rank = names(.x)) ,.id = "taxID") -> new.lineages.good
+# 
+# new.lineages.good |> 
+#   dplyr::rename(name = 2) |> 
+#   filter (rank %in%  c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) |> 
+#   mutate(taxID = as.numeric(taxID)) -> new.lineages.good
+# 
+# new.lineages.good |> 
+#   bind_rows(lineages3)|> 
+#   filter (rank %in%  c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) |> 
+#   distinct() -> all.lineages
+
+
+```
+
+
+Join Output and lineages
+
+```{r}
+custom.lca <- function (df, cutoff = 90, keep.unresolved = F) {  # this function allows to change cutoff parameters for a specified dataframe (df)
+    # ADDED on APR 2023
+    # IF there are matches with the structure FAMILY sp. RAndmom
+    # KEep them only if there aren't equally good matches with full details
+  if (!isTRUE(keep.unresolved)){
+    df |> 
+      filter (!str_detect(species, " sp.")) -> df
+  }  
+  df %>%  
+  group_by(qseqid) %>%
+  select( pident, kingdom, phylum, class, order, family, genus, species) %>%
+  nest() %>% # for each query, calculate the agreed taxonomy
+  # ungroup %>% slice (1:10) %>%
+  mutate(consensus = purrr::map(data,  function(.x) {
+    # If there are 100% matches - keep those and calculate the LCA
+   
+    if (max(.x$pident == 100 )){
+       .x %>%
+        filter(pident == 100) %>%
+        select(-pident) %>%
+        condenseTaxa() %>% # agreement in Phylogeny
+      paste(., collapse = "%")
+      
+    }else{
+       # If there are no 100% matches, then keep things better than our cutoff
+    if(max(.x$pident > cutoff )){
+
+      .x %>%
+        filter(pident > cutoff) %>%
+        select(-pident) %>%
+        condenseTaxa() %>% # agreement in Phylogeny
+      paste(., collapse = "%")
+
+       
+
+    }else{
+      # If there are no matches, better than the cutoff, then keep everything above 90
+      
+    .x %>%
+         filter(pident > 90) %>%
+        select(-pident) %>%
+    condenseTaxa() %>%
+       paste(., collapse = "%")
+      }
+  }
+  }
+  
+  # Collapse all the taxa data separatated by %, como queda feo para leer en excel lo modificamos con # PERO es un lio dejarlo sin el % porq deja la table separada sin heads asi que mejor dejarlo como esta y luego en R separar las columnas por % y asignarles nombres
+  
+  )) %>%
+  select(qseqid, consensus) %>%
+  unnest(consensus)}
+```
+
+```{r}
+lineages |> 
+  group_by(taxID, rank) |> 
+  tally() |> 
+  filter (n >1) |> 
+  distinct(taxID) %>% 
+  anti_join(lineages,.) |> 
+  pivot_wider(names_from = "rank", values_from = "name") %>%
+  left_join(output |> 
+              filter (pident > 90) |>
+              separate_rows(staxid, sep = ";", convert = T) |> 
+              dplyr::rename(taxID = staxid),.) -> ready
+
+
+```
+
+Do it
+
+```{r}
+custom.lca(df = ready,cutoff = 97,keep.unresolved = F) -> finalid_blastx
+
+finalid_blastx |> 
+  separate(qseqid, into = "qseqid", sep = ";size=") -> finalid_blastx
+```
+
+## BLASTP with the best translation
+
+```{r}
+output_blastp <- read_delim(here("data/blastp/output_2023_06_30.txt"), 
+     delim = "\t", escape_double = FALSE, 
+     col_names = c("qseqid", "sseqid",  "pident", "length" ,"mismatch", "gapopen" ,"qstart","qend", "sstart", "send" ,"evalue" ,"bitscore", "staxid", "qlen"), trim_ws = TRUE)
+
+# output_blastp |>  filter (pident > 90) |> 
+#   separate_rows(staxid, sep = ";", convert = T) |> 
+#   distinct(taxID = staxid) |> 
+#   anti_join(all.lineages) |>  pull() -> taxes
+# 
+# taxes |> 
+#   map(insect::get_lineage, taxonomy) -> new.taxes
+# new.taxes <- set_names(x = new.taxes,nm =  taxes)
+# 
+# new.taxes %>% discard(function(x) is.na(x[[1]]) ) ->  new.taxes
+# 
+# new.taxes|> 
+#   map_dfr(~ bind_cols(.x) |>  mutate (rank = names(.x)) ,.id = "taxID") -> new.taxes
+# 
+# new.taxes |> 
+#   dplyr::rename(name = 2) |> 
+#   filter (rank %in%  c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) |> 
+#   mutate(taxID = as.numeric(taxID)) -> new.taxes
+# 
+# new.lineages.good |> 
+#   bind_rows(lineages3)|> 
+#   bind_rows(new.taxes) |> 
+#   filter (rank %in%  c( "kingdom", "phylum", "class", "order", "family","genus" , "species")) |> 
+#   distinct() -> all.lineages
+
+lineages |> 
+  group_by(taxID, rank) |> 
+  tally() |> 
+  filter (n >1) |> 
+  distinct(taxID) %>% 
+  anti_join(lineages,.) |> 
+  pivot_wider(names_from = "rank", values_from = "name") %>%
+  inner_join(output_blastp |> 
+              filter (pident > 90) |>
+              separate_rows(staxid, sep = ";", convert = T) |> 
+              dplyr::rename(taxID = staxid),.) -> ready
+
+
+custom.lca(df = ready,cutoff = 97,keep.unresolved = F) -> finalid_blastp
+```
+## Combine all results
+
+```{r}
+output |> distinct(qseqid) |>
+  left_join(Hash.clas.last, by = c("qseqid" = "Hash")) |> 
+  dplyr::rename(starting = taxa) -> starting
+starting |> 
+  full_join(newIDs.BOLD, by = c("qseqid" = "Hash")) |> 
+  dplyr::rename(BOLD = taxa) -> with.bold
+
+## reduce artificial precision of BLASTP and BLASTx
+finalid_blastx |> 
+   separate(consensus, into = taxonomy.cols, sep = "%") |> 
+  mutate (genus = NA, species = NA) |> 
+  unite(-qseqid, sep = "%", col = "consensus") -> finalid_blastx
+
+finalid_blastp |> 
+   separate(consensus, into = taxonomy.cols, sep = "%") |> 
+  mutate (genus = NA, species = NA) |> 
+  unite(-qseqid, sep = "%", col = "consensus") -> finalid_blastp
+
+
+newIDs.BOLD |>
+  rename(qseqid = Hash, BOLD = taxa) |> 
+  full_join(finalid_blastx) |>
+  rename(BLASTx = consensus) |> 
+  full_join(finalid_blastp) |> 
+    rename(BLASTp = consensus, Hash = qseqid) |> 
+  inner_join(Hash.clas.last) -> together
+
+
+```
+
+
+The criteria is first look if BOLD could not get to anything, then trust BLAStx and BLASTp, only to a family level, given the lack of resolution of the AA sequence.
+
+BLASTp has been done with many sequences. we only need to keep that in those in which the resolution of the BLAST was worse
+
+
+
+
+```{r}
+together |> 
+   mutate(final_id = case_when(BOLD == "NA|NA|NA|NA|NA|NA|NA"   ~ BLASTx,
+                              !is.na(BOLD)                      ~ BOLD,
+                              !is.na(BLASTx)                    ~ BLASTx ,
+                              TRUE                              ~ taxa)) -> together
+                              
+```
+
+```{r}
+together |> 
+  filter (str_detect(final_id, "Insecta")) |> View()
+  # separate (taxa, into = taxonomy.cols, sep = "\\|") |> 
+  # mutate (precision = case_when(species == "NA" & genus == "NA" & family !="NA" ~ "family",
+  #                               species == "NA" & genus != "NA" & family !="NA" ~ "genus",
+  #                               species != "NA" & genus != "NA" & family !="NA" ~ "species")) |> 
+  # select (Hash, precision) |> 
+  # right_join(together)|> 
+  # mutate (final_id = case_when(!is.na(final_id)   ~ final_id,
+  #                            BLASTp == "NA%NA%NA%NA%NA%NA%NA"   ~ "NA%NA%NA%NA%NA%NA%NA",
+  #                            TRUE                               ~ taxa)) |> 
+  # filter (!is.na(final_id)) |> View()
+```
+

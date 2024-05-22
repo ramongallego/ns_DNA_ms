@@ -9,6 +9,7 @@ editor_options:
 We have successfully BLASTed our sequences and now we want to recover the taxonomical information associated with each search
 
 ```{r}
+library(here)
 library(tidyverse)
 library(insect)
 library(taxonomizr)
