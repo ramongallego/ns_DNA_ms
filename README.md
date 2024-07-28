@@ -1,5 +1,5 @@
 # Biodiversity assessment of deep-sea benthic communities in North Atlantic and Arctic sponge grounds using sponge DNA
-Data and scripts needed to process the output of the demultiplexer for dada2 for the MiSeq run  by Arias & Gallego et al, 2023.
+Data and scripts needed to process the output of the demultiplexer for dada2 for the MiSeq run  by Arias & Gallego et al, 2023. DOI for this repository : https://doi.org/10.5281/zenodo.13119040
 
 ## How to use this repo
 
